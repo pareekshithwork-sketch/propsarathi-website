@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAllProjects, createProject } from '@/lib/projectsDb'
 
 function checkAuth(req: NextRequest) {
-  return req.headers.get('x-admin-key') === 'PropSarathi@Admin2026'
+  return req.headers.get('x-admin-key') === process.env.ADMIN_SECRET_KEY
 }
 
 export async function GET(req: NextRequest) {

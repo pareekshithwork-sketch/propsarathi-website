@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { Building2, Users, MessageSquare, LogOut, Plus, Pencil, Trash2, X, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp } from "lucide-react"
 
-const ADMIN_KEY = 'PropSarathi@Admin2026'
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Project {
   id: number
@@ -36,19 +34,34 @@ function slugify(name: string) {
 }
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (username === 'pareekshith' && password === 'PropSarathi@Admin2026') {
-      localStorage.setItem('admin_authed', 'true')
-      onLogin()
-    } else {
-      setError('Invalid credentials')
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/verify-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      const data = await res.json()
+      if (res.ok && data.token) {
+        localStorage.setItem('admin_token', data.token)
+        onLogin(data.token)
+      } else {
+        setError(data.error || 'Invalid credentials')
+      }
+    } catch {
+      setError('Login failed. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -91,9 +104,9 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
             </div>
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button type="submit"
-            className="w-full py-2.5 bg-[#422D83] hover:bg-[#2d1a60] text-white font-medium rounded-xl transition text-sm">
-            Login
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 bg-[#422D83] hover:bg-[#2d1a60] text-white font-medium rounded-xl transition text-sm disabled:opacity-50">
+            {loading ? 'Verifying...' : 'Login'}
           </button>
         </form>
       </div>
@@ -248,7 +261,7 @@ function ProjectModal({
 }
 
 // ─── Projects Tab ─────────────────────────────────────────────────────────────
-function ProjectsTab() {
+function ProjectsTab({ adminKey }: { adminKey: string }) {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ open: boolean; project: Partial<Project> | null }>({ open: false, project: null })
@@ -257,13 +270,13 @@ function ProjectsTab() {
   const fetchProjects = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/projects', { headers: { 'x-admin-key': ADMIN_KEY } })
+      const res = await fetch('/api/admin/projects', { headers: { 'x-admin-key': adminKey } })
       const data = await res.json()
       setProjects(data.projects || [])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [adminKey])
 
   useEffect(() => { fetchProjects() }, [fetchProjects])
 
@@ -271,13 +284,13 @@ function ProjectsTab() {
     if (form.id) {
       await fetch(`/api/admin/projects/${form.id}`, {
         method: 'PUT',
-        headers: { 'x-admin-key': ADMIN_KEY, 'Content-Type': 'application/json' },
+        headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
     } else {
       const res = await fetch('/api/admin/projects', {
         method: 'POST',
-        headers: { 'x-admin-key': ADMIN_KEY, 'Content-Type': 'application/json' },
+        headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
       const data = await res.json()
@@ -289,7 +302,7 @@ function ProjectsTab() {
   async function handleDelete(id: number) {
     if (!confirm('Archive this project?')) return
     setDeleting(id)
-    await fetch(`/api/admin/projects/${id}`, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } })
+    await fetch(`/api/admin/projects/${id}`, { method: 'DELETE', headers: { 'x-admin-key': adminKey } })
     await fetchProjects()
     setDeleting(null)
   }
@@ -379,12 +392,12 @@ function ProjectsTab() {
 }
 
 // ─── Enquiries Tab ────────────────────────────────────────────────────────────
-function EnquiriesTab() {
+function EnquiriesTab({ adminKey }: { adminKey: string }) {
   const [enquiries, setEnquiries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/portal/enquiry', { headers: { 'x-admin-key': ADMIN_KEY } })
+    fetch('/api/portal/enquiry', { headers: { 'x-admin-key': adminKey } })
       .then(r => r.json())
       .then(d => setEnquiries(d.enquiries || []))
       .catch(() => setEnquiries([]))
@@ -437,12 +450,12 @@ function EnquiriesTab() {
 }
 
 // ─── Viewers Tab ──────────────────────────────────────────────────────────────
-function ViewersTab() {
+function ViewersTab({ adminKey }: { adminKey: string }) {
   const [viewers, setViewers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/admin/viewers', { headers: { 'x-admin-key': ADMIN_KEY } })
+    fetch('/api/admin/viewers', { headers: { 'x-admin-key': adminKey } })
       .then(r => r.json())
       .then(d => setViewers(d.viewers || []))
       .catch(() => setViewers([]))
@@ -492,21 +505,26 @@ function ViewersTab() {
 
 // ─── Main Admin Page ──────────────────────────────────────────────────────────
 export default function AdminPortalPage() {
-  const [authed, setAuthed] = useState<boolean | null>(null)
+  const [adminKey, setAdminKey] = useState<string | null>(null)
   const [tab, setTab] = useState<'projects' | 'enquiries' | 'viewers'>('projects')
 
   useEffect(() => {
-    setAuthed(localStorage.getItem('admin_authed') === 'true')
+    const stored = localStorage.getItem('admin_token')
+    setAdminKey(stored)
   }, [])
 
-  function handleLogout() {
-    localStorage.removeItem('admin_authed')
-    setAuthed(false)
+  function handleLogin(token: string) {
+    setAdminKey(token)
   }
 
-  if (authed === null) return null // waiting for localStorage check
+  function handleLogout() {
+    localStorage.removeItem('admin_token')
+    setAdminKey(null)
+  }
 
-  if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />
+  if (adminKey === null) return null // waiting for localStorage check
+
+  if (!adminKey) return <LoginScreen onLogin={handleLogin} />
 
   const tabs = [
     { id: 'projects' as const, label: 'Projects', icon: Building2 },
@@ -556,9 +574,9 @@ export default function AdminPortalPage() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {tab === 'projects' && <ProjectsTab />}
-        {tab === 'enquiries' && <EnquiriesTab />}
-        {tab === 'viewers' && <ViewersTab />}
+        {tab === 'projects' && <ProjectsTab adminKey={adminKey} />}
+        {tab === 'enquiries' && <EnquiriesTab adminKey={adminKey} />}
+        {tab === 'viewers' && <ViewersTab adminKey={adminKey} />}
       </main>
     </div>
   )

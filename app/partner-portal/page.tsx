@@ -2,8 +2,8 @@
 
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
-import Header from "../../components/Header"
-import Footer from "../../components/Footer"
+import Header from "@/components/Header"
+import SharedFooter from "@/components/SharedFooter"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -138,7 +138,7 @@ export default function PartnerPortalPage() {
           <AuthView view={view} setView={setView} onLoginSuccess={handleLoginSuccess} />
         )}
       </main>
-      <Footer />
+      <SharedFooter />
     </div>
   )
 }

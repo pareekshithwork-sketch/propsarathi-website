@@ -5,7 +5,7 @@ import { addCRMLead, addCRMHistory, getCRMLeads } from '@/lib/crmSheets'
 import sql from '@/lib/db'
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('x-admin-key') !== 'PropSarathi@Admin2026') {
+  if (req.headers.get('x-admin-key') !== process.env.ADMIN_SECRET_KEY) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {

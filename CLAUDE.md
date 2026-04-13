@@ -50,12 +50,12 @@ app/                  # Next.js App Router pages
     properties/       # Property data
     crm/              # CRM endpoints
     partner/          # Partner portal endpoints
-    admin/            # Admin endpoints
+    admin/            # Admin endpoints (includes verify-login)
     auth/             # Authentication
 
 components/           # Reusable UI components
   Header.tsx
-  Footer.tsx / SharedFooter.tsx
+  SharedFooter.tsx    # Single canonical footer (Footer.tsx was deleted)
   Hero.tsx
   Map.tsx / MapClient.tsx / MapEditor.tsx
   FeaturedProperties.tsx
@@ -84,8 +84,11 @@ Secrets live in `.env.local` (not committed). Key variables:
 
 - `DATABASE_URL` / `POSTGRES_URL` — Neon Postgres connection
 - `GOOGLE_SHEETS_*` — Google Sheets service account credentials
-- `ADMIN_SECRET_KEY` — Admin portal access key
-- All secrets are also set in the Vercel project dashboard for production
+- `ADMIN_SECRET_KEY` — Admin portal API key (returned to frontend after login; used as `x-admin-key` header)
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` — Admin portal login credentials (validated server-side only)
+- `CRM_ADMIN_PASSWORD` / `CRM_RM_PASSWORD` — CRM user passwords
+- `JWT_SECRET` — Secret for signing CRM JWT tokens
+- All secrets must also be set in the Vercel dashboard for production
 
 Never commit `.env.local` or any file containing real credentials.
 
@@ -112,7 +115,8 @@ npm run lint     # Run ESLint
 ## Deployment
 
 - Push to the `main` branch on GitHub → Vercel auto-deploys
-- Remote: `https://github.com/rawalpareekshith/propsarathi-website`
+- Remote: `https://github.com/pareekshithwork-sketch/propsarathi-website`
+- Local working directory: `~/Documents/propsarathi`
 - Environment variables must be set in the Vercel dashboard for production; `.env.local` is for local development only
 
 ## Coding Guidelines
@@ -123,3 +127,37 @@ npm run lint     # Run ESLint
 - Forms use **react-hook-form** + **zod** for validation
 - Keep API routes in `app/api/` following the existing folder structure
 - Do not add unnecessary abstractions — keep it simple and working
+- Always use `@/` absolute imports (never relative `../../` paths)
+
+## Product Vision
+
+PropSarathi targets ALL customers: buyers, sellers, renters, NRI investors, and channel partners across Pan India and Dubai.
+
+**Three products to build:**
+1. **Main Website** — Full property portal: listings, search/filters, map view, compare, EMI calculator, market blog, all contact channels
+2. **CRM** — Agent dashboard: auto-capture leads, pipeline stages (New → Contacted → Site Visit → Negotiation → Closed), assign to agents, follow-up reminders, performance reports
+3. **Partner Portal** — Channel partner login, submit referrals, track commission, download marketing materials
+
+## Sprint History
+
+### Sprint 1 — April 2026 (Cleanup & Security)
+
+**Cleaned up:**
+- Deleted: `App.tsx`, `index.tsx`, `index.html`, `vite.config.ts` (Vite leftover files)
+- Deleted: `migrate_temp.js`, `migrate2.js` (one-off migration scripts)
+- Deleted: `GOOGLE_SHEETS_SETUP.md`, `GOOGLE_SHEETS_DIRECT_SETUP.md`, `WEBHOOK_SETUP_INSTRUCTIONS.md`, `SETUP_GUIDE.md` (stale setup docs)
+- Deleted: `components/Footer.tsx` (duplicate — `SharedFooter.tsx` is the canonical footer used everywhere)
+- Deleted: `components/ContactPage.tsx`, `components/BlogPage.tsx` (unused legacy components)
+
+**Security fixes:**
+- Admin login: moved credential check from client-side JS to server-side API route (`/api/admin/verify-login`). Credentials no longer visible in browser DevTools
+- Admin API key: all admin API routes now read `process.env.ADMIN_SECRET_KEY` instead of the hardcoded string
+- CRM credentials: passwords removed from `lib/crmAuth.ts`; now read from `CRM_ADMIN_PASSWORD` / `CRM_RM_PASSWORD` env vars
+- CRM JWT secret: removed hardcoded fallback; requires `JWT_SECRET` env var
+- Partner portal: fixed broken relative imports (`../../components/Header`) → `@/` absolute imports; `Footer` → `SharedFooter`
+- SEO metadata: replaced placeholder phone numbers with real-format placeholders (`+971-50-000-0000`, `+91-98800-00000`)
+
+**Vercel env vars to add (production):**
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD` (admin portal login)
+- `CRM_ADMIN_PASSWORD`, `CRM_RM_PASSWORD` (CRM logins)
+- `JWT_SECRET` (CRM token signing)
