@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import Link from "next/link"
-import { MapPin, X, ExternalLink, Building2, ChevronLeft, ChevronRight, ChevronDown, Layers } from "lucide-react"
+import { MapPin, X, ExternalLink, Building2, ChevronLeft, ChevronRight, ChevronDown, Layers, Search } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,15 @@ interface DbLayer {
   visible: boolean
   sort_order: number
   feature_styles?: FeatureStyle[]
+}
+
+interface POIResult {
+  id: number
+  lat: number
+  lng: number
+  name: string
+  category: string
+  icon: string
 }
 
 interface Project {
@@ -95,6 +104,17 @@ const LAYER_GROUPS: { id: string; label: string; icon: string; folderNames: stri
   },
 ]
 
+// ─── Search categories ────────────────────────────────────────────────────────
+
+const SEARCH_CATEGORIES = [
+  { id: "school",   label: "Schools",   icon: "🏫", tag: `["amenity"="school"]` },
+  { id: "hospital", label: "Hospitals", icon: "🏥", tag: `["amenity"="hospital"]` },
+  { id: "cafe",     label: "Cafes",     icon: "☕", tag: `["amenity"="cafe"]` },
+  { id: "mall",     label: "Malls",     icon: "🛍️", tag: `["shop"="mall"]` },
+  { id: "it_park",  label: "IT Parks",  icon: "💻", tag: `["office"~"it|technology",i]` },
+  { id: "metro",    label: "Metro",     icon: "🚇", tag: `["station"="subway"]` },
+]
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getGroupForLayer(folderName: string): string | null {
@@ -114,6 +134,15 @@ function groupCheckState(groupId: string, layers: DbLayer[]): "all" | "some" | "
   if (visible === 0) return "none"
   if (visible === matching.length) return "all"
   return "some"
+}
+
+/** Haversine distance in km */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 // ─── Checkbox with indeterminate support ──────────────────────────────────────
@@ -152,13 +181,22 @@ export default function MapClient() {
   const kmlLayerGroupsRef     = useRef<Record<string, any>>({})
   const kmlDataFingerprintRef = useRef<Record<string, string>>({})
   const tileLayerRef          = useRef<any>(null)
+  const searchLayerGroupRef   = useRef<any>(null)
 
   const [city, setCity]               = useState<"Bangalore" | "Dubai">("Bangalore")
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showProjects, setShowProjects] = useState(true)
   const [mapReady, setMapReady]       = useState(false)
-  const [mapType, setMapType]         = useState("street")
+  const [mapType, setMapType]         = useState<string>(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("ps_mapType") || "street"
+    return "street"
+  })
   const [kmlLayers, setKmlLayers]     = useState<DbLayer[]>([])
+
+  // Search state
+  const [searchResults, setSearchResults] = useState<POIResult[]>([])
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [searchLoading, setSearchLoading]   = useState(false)
 
   // Sidebar open/close — open by default on desktop, closed on mobile
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -217,6 +255,7 @@ export default function MapClient() {
       L.control.zoom({ position: "bottomright" }).addTo(map)
       mapInstanceRef.current = map
       projectsLGRef.current = L.layerGroup().addTo(map)
+      searchLayerGroupRef.current = L.layerGroup().addTo(map)
       setMapReady(true)
     }
     document.head.appendChild(script)
@@ -239,6 +278,8 @@ export default function MapClient() {
     map.flyTo([view.lat, view.lng], view.zoom, { duration: 1.5 })
     setSelectedProject(null)
     setMapType(city === "Dubai" ? "street_en" : "street")
+    setSearchResults([])
+    setActiveCategory(null)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city])
 
@@ -292,14 +333,24 @@ export default function MapClient() {
     tileLayerRef.current = newTile
   }, [mapReady, mapType])
 
+  // ── Save mapType to localStorage ─────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("ps_mapType", mapType)
+  }, [mapType])
+
   // ── Load KML layers ──────────────────────────────────────────────────────────
   const fetchLayers = useCallback((cityName: string) => {
     fetch(`/api/map/layers?city=${cityName}&t=${Date.now()}`, { cache: "no-store" })
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
-          // Always start hidden — user opts in via the panel
-          setKmlLayers(data.map((l: DbLayer) => ({ ...l, visible: false })))
+          // Restore saved visibility; default hidden if nothing saved
+          let savedVisible: string[] = []
+          try { savedVisible = JSON.parse(localStorage.getItem(`ps_layers_${cityName}`) || "[]") } catch {}
+          setKmlLayers(data.map((l: DbLayer) => ({
+            ...l,
+            visible: savedVisible.length > 0 ? savedVisible.includes(String(l.id)) : false,
+          })))
         }
       })
       .catch(() => {})
@@ -312,6 +363,13 @@ export default function MapClient() {
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
   }, [fetchLayers, city])
+
+  // ── Save layer visibility to localStorage ────────────────────────────────────
+  useEffect(() => {
+    if (kmlLayers.length === 0) return
+    const visibleIds = kmlLayers.filter(l => l.visible).map(l => String(l.id))
+    try { localStorage.setItem(`ps_layers_${city}`, JSON.stringify(visibleIds)) } catch {}
+  }, [kmlLayers, city])
 
   // ── Build a Leaflet layerGroup (called once per layer) ────────────────────────
   const buildLayerGroup = useCallback((layer: DbLayer, L: any) => {
@@ -415,6 +473,34 @@ export default function MapClient() {
     })
   }, [mapReady, kmlLayers, buildLayerGroup])
 
+  // ── Render search result pins ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapReady || !searchLayerGroupRef.current) return
+    const L = (window as any).L
+    const lg = searchLayerGroupRef.current
+    lg.clearLayers()
+    if (searchResults.length === 0) return
+    const cityProjects = PROJECTS.filter(p => p.city === city)
+    searchResults.forEach(poi => {
+      let nearestName = "", nearestDist = Infinity
+      cityProjects.forEach(p => {
+        const d = haversineKm(poi.lat, poi.lng, p.lat, p.lng)
+        if (d < nearestDist) { nearestDist = d; nearestName = p.name }
+      })
+      const distText = nearestName
+        ? nearestDist < 1 ? `${Math.round(nearestDist * 1000)}m from ${nearestName}` : `${nearestDist.toFixed(1)}km from ${nearestName}`
+        : ""
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="font-size:22px;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));line-height:1;">${poi.icon}</div>`,
+        iconSize: [24, 24], iconAnchor: [12, 12],
+      })
+      L.marker([poi.lat, poi.lng], { icon })
+        .addTo(lg)
+        .bindPopup(`<div style="font-family:system-ui,sans-serif;"><div style="font-weight:700;font-size:13px;color:#1f2937;margin-bottom:2px;">${poi.icon} ${poi.name}</div>${distText ? `<div style="font-size:11px;color:#6b7280;">📍 ${distText}</div>` : ""}</div>`)
+    })
+  }, [mapReady, searchResults, city])
+
   // ── Layer panel helpers ──────────────────────────────────────────────────────
   function selectAll() {
     setShowProjects(true)
@@ -437,6 +523,30 @@ export default function MapClient() {
     setGroupsExpanded(prev => ({ ...prev, [groupId]: !prev[groupId] }))
   }
 
+  // ── Search helpers ───────────────────────────────────────────────────────────
+  async function searchPOI(categoryId: string) {
+    if (!mapInstanceRef.current) return
+    if (activeCategory === categoryId) {
+      setActiveCategory(null); setSearchResults([]); return
+    }
+    setActiveCategory(categoryId)
+    setSearchLoading(true)
+    try {
+      const { lat, lng } = mapInstanceRef.current.getCenter()
+      const cat = SEARCH_CATEGORIES.find(c => c.id === categoryId)!
+      const query = `[out:json][timeout:10];node${cat.tag}(around:5000,${lat.toFixed(4)},${lng.toFixed(4)});out 30;`
+      const res = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`)
+      const json = await res.json()
+      setSearchResults((json.elements || []).slice(0, 30).map((el: any) => ({
+        id: el.id, lat: el.lat, lng: el.lon,
+        name: el.tags?.name || el.tags?.["name:en"] || cat.label,
+        category: cat.label, icon: cat.icon,
+      })))
+    } catch { setSearchResults([]) }
+    setSearchLoading(false)
+  }
+  function clearSearch() { setActiveCategory(null); setSearchResults([]) }
+
   // ── Layers that don't belong to any group ────────────────────────────────────
   const ungroupedLayers = kmlLayers.filter(l => !getGroupForLayer(l.folder_name))
 
@@ -448,6 +558,9 @@ export default function MapClient() {
         .ps-tooltip::before { display:none!important; }
         .leaflet-container { font-family:inherit; }
         .leaflet-control-attribution { display:none!important; }
+        .leaflet-popup-content-wrapper { padding:0!important;border-radius:10px!important;overflow:hidden!important;box-shadow:0 4px 16px rgba(0,0,0,0.18)!important;border:none!important; }
+        .leaflet-popup-content { margin:0!important;padding:8px 12px!important; }
+        .leaflet-popup-tip-container { display:none!important; }
       `}</style>
 
       {/* ── Top bar ── */}
@@ -641,6 +754,41 @@ export default function MapClient() {
         <div className="flex-1 relative h-full">
           <div ref={mapRef} className="w-full h-full" />
 
+          {/* ── Search bar + category chips ── */}
+          <div className="absolute top-3 left-3 right-3 sm:left-1/2 sm:-translate-x-1/2 sm:w-[420px] z-[600]">
+            <div className="flex items-center gap-2 bg-white rounded-2xl shadow-lg border border-gray-200 px-3 py-2">
+              {searchLoading
+                ? <span className="w-4 h-4 border-2 border-[#422D83]/30 border-t-[#422D83] rounded-full animate-spin flex-shrink-0" />
+                : <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+              <span className="flex-1 text-sm text-gray-400 truncate">
+                {activeCategory
+                  ? `${searchResults.length} ${SEARCH_CATEGORIES.find(c => c.id === activeCategory)?.label} nearby`
+                  : "Search nearby places…"}
+              </span>
+              {activeCategory && (
+                <button onClick={clearSearch} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 transition">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2 mt-2 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
+              {SEARCH_CATEGORIES.map(cat => (
+                <button key={cat.id} onClick={() => searchPOI(cat.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shadow-sm border flex-shrink-0 ${
+                    activeCategory === cat.id
+                      ? "bg-[#422D83] text-white border-[#422D83]"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-[#422D83] hover:text-[#422D83]"
+                  }`}>
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                  {activeCategory === cat.id && searchResults.length > 0 && (
+                    <span className="bg-white/30 rounded-full px-1 leading-none">{searchResults.length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* ── Project detail panel ── */}
           {selectedProject && (
             <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-[500] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
@@ -697,6 +845,11 @@ export default function MapClient() {
                   {kmlLayers.length > 0 && (
                     <span className="text-xs text-gray-400">
                       + <strong>{kmlLayers.length}</strong> layer{kmlLayers.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {searchResults.length > 0 && (
+                    <span className="text-xs text-gray-400">
+                      · <strong>{searchResults.length}</strong> {SEARCH_CATEGORIES.find(c => c.id === activeCategory)?.label}
                     </span>
                   )}
                 </div>
