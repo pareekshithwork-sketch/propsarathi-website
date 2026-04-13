@@ -76,11 +76,12 @@ const TILE_PROVIDERS: Record<string, { url: string; opts: any; label: string; ic
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MapClient() {
-  const mapRef          = useRef<HTMLDivElement>(null)
-  const mapInstanceRef  = useRef<any>(null)
-  const projectsLGRef   = useRef<any>(null)
-  const kmlLayerGroupsRef = useRef<Record<string, any>>({})
-  const tileLayerRef    = useRef<any>(null)
+  const mapRef              = useRef<HTMLDivElement>(null)
+  const mapInstanceRef      = useRef<any>(null)
+  const projectsLGRef       = useRef<any>(null)
+  const kmlLayerGroupsRef   = useRef<Record<string, any>>({})
+  const kmlDataFingerprintRef = useRef<Record<string, string>>({})
+  const tileLayerRef        = useRef<any>(null)
 
   const [city, setCity]               = useState<"Bangalore" | "Dubai">("Bangalore")
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
@@ -110,7 +111,7 @@ export default function MapClient() {
     script.onload = () => {
       const L = (window as any).L
       const view = CITY_VIEW[city]
-      const map = L.map(mapRef.current, { center: [view.lat, view.lng], zoom: view.zoom, zoomControl: false })
+      const map = L.map(mapRef.current, { center: [view.lat, view.lng], zoom: view.zoom, zoomControl: false, preferCanvas: true })
       const tile = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "", maxZoom: 19 })
       tile.addTo(map)
       tileLayerRef.current = tile
@@ -208,148 +209,156 @@ export default function MapClient() {
   const fetchLayers = useCallback((cityName: string) => {
     fetch(`/api/map/layers?city=${cityName}&t=${Date.now()}`, { cache: "no-store" })
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setKmlLayers([...data]) })
+      .then(data => {
+        if (Array.isArray(data)) {
+          // Always start all layers hidden — user turns them on via the Layers panel
+          setKmlLayers(data.map((l: DbLayer) => ({ ...l, visible: false })))
+        }
+      })
       .catch(() => {})
   }, [])
 
   useEffect(() => {
+    // Clear layers immediately so old-city layers vanish before new ones load
+    setKmlLayers([])
     fetchLayers(city)
     const onVisible = () => { if (document.visibilityState === "visible") fetchLayers(city) }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
   }, [fetchLayers, city])
 
-  // ── Render KML layers with per-feature colors ───────────────────────────────
+  // ── Build a Leaflet layerGroup for a single KML layer (called once per layer) ──
+  const buildLayerGroup = useCallback((layer: DbLayer, L: any) => {
+    const lg = L.layerGroup()
+    try {
+      const featureColorMap = new Map<number, string>()
+      const featureVisibleMap = new Map<number, boolean>()
+      if (layer.feature_styles?.length) {
+        layer.feature_styles.forEach((fs, i) => {
+          featureColorMap.set(i, fs.color || layer.color)
+          featureVisibleMap.set(i, fs.visible !== false)
+        })
+      }
+
+      const features = layer.geojson?.features || []
+      const totalFeatures = features.length
+      // Label density: ≤5 features → every feature; 6-20 → every 3rd; >20 (PRR=252, Suburban=391) → every 50th
+      const labelInterval = totalFeatures <= 5 ? 1 : totalFeatures <= 20 ? 3 : 50
+
+      const FOLDER_SHORT: Record<string, string> = {
+        "PRR": "PRR",
+        "BLR Suburban Rail": "Suburban Rail",
+        "Intermediate Ring Road": "IRR",
+        "Satellite Town Ring Road": "STRR",
+        "Under Construction Metro Lines Namma Metro": "Metro UC",
+        "Proposed Lines": "Proposed",
+      }
+      const shortFolder = FOLDER_SHORT[layer.folder_name] || layer.folder_name
+      const isPRR = layer.folder_name === "PRR"
+
+      features.forEach((feature: any, i: number) => {
+        const color = featureColorMap.get(i) || layer.color
+        const visible = featureVisibleMap.get(i) !== false
+        if (!visible) return
+
+        const featureName = feature.properties?.name || feature.properties?.Name || ""
+        const labelText = isPRR
+          ? "PRR"
+          : (featureName && featureName !== layer.folder_name && !featureName.startsWith("Feature ")
+              ? `${shortFolder} • ${featureName}`
+              : shortFolder)
+
+        const singleGeoJson = { type: "FeatureCollection", features: [feature] }
+        const geoLayer = L.geoJSON(singleGeoJson, {
+          style: () => ({ color, weight: 3, opacity: 0.85, fillColor: color, fillOpacity: 0.15 }),
+          pointToLayer: (_: any, latlng: any) => {
+            const icon = L.divIcon({
+              className: "",
+              html: `<div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid white;"></div>`,
+              iconSize: [10, 10], iconAnchor: [5, 5],
+            })
+            return L.marker(latlng, { icon })
+          },
+          onEachFeature: (f: any, lyr: any) => {
+            const name = f.properties?.name || f.properties?.Name || layer.folder_name
+            lyr.bindTooltip(`📍 ${name}`, { sticky: true, className: "ps-tooltip" })
+          },
+        })
+        geoLayer.addTo(lg)
+
+        if (i % labelInterval === 0) {
+          try {
+            const geom = feature.geometry
+            let midLat: number | null = null
+            let midLng: number | null = null
+
+            if (geom?.type === "LineString" && geom.coordinates?.length) {
+              const mid = Math.floor(geom.coordinates.length / 2)
+              midLng = geom.coordinates[mid][0]; midLat = geom.coordinates[mid][1]
+            } else if (geom?.type === "MultiLineString" && geom.coordinates?.length) {
+              const line = geom.coordinates[0]
+              const mid = Math.floor(line.length / 2)
+              midLng = line[mid][0]; midLat = line[mid][1]
+            } else if (geom?.type === "Polygon" && geom.coordinates?.length) {
+              const ring = geom.coordinates[0]
+              const mid = Math.floor(ring.length / 2)
+              midLng = ring[mid][0]; midLat = ring[mid][1]
+            }
+
+            if (midLat !== null && midLng !== null) {
+              const labelIcon = L.divIcon({
+                className: "",
+                html: `<div style="background:rgba(255,255,255,0.85);color:${color};font-size:11px;font-weight:700;font-family:system-ui,sans-serif;padding:2px 5px;border-radius:3px;border:1.5px solid ${color};white-space:nowrap;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.2);">${labelText}</div>`,
+                iconSize: undefined as any,
+                iconAnchor: [0, 10],
+              })
+              L.marker([midLat, midLng], { icon: labelIcon, interactive: false, zIndexOffset: -100 }).addTo(lg)
+            }
+          } catch {}
+        }
+      })
+    } catch (e) { console.warn("KML build error", layer.folder_name, e) }
+    return lg
+  }, [])
+
+  // ── Render KML layers — build once per layer, then only toggle visibility ─────
+  // This avoids re-creating heavy GeoJSON layers on every state change.
+  // Visibility toggle is just map.addLayer / map.removeLayer — instant, no flicker.
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return
     const L = (window as any).L
     const map = mapInstanceRef.current
 
-    Object.values(kmlLayerGroupsRef.current).forEach((lg: any) => { if (map.hasLayer(lg)) map.removeLayer(lg) })
-    kmlLayerGroupsRef.current = {}
+    // Remove layer groups that no longer exist in the current city's data
+    const newIds = new Set(kmlLayers.map(l => String(l.id)))
+    Object.keys(kmlLayerGroupsRef.current).forEach(id => {
+      if (!newIds.has(id)) {
+        if (map.hasLayer(kmlLayerGroupsRef.current[id])) map.removeLayer(kmlLayerGroupsRef.current[id])
+        delete kmlLayerGroupsRef.current[id]
+        delete kmlDataFingerprintRef.current[id]
+      }
+    })
 
     kmlLayers.forEach(layer => {
-      const lg = L.layerGroup()
-      kmlLayerGroupsRef.current[layer.id] = lg
-      if (!layer.visible) return
-      try {
-        // Build a feature→color map up front using the feature_styles index
-        const featureColorMap = new Map<number, string>()
-        const featureVisibleMap = new Map<number, boolean>()
-        if (layer.feature_styles?.length) {
-          layer.feature_styles.forEach((fs, i) => {
-            featureColorMap.set(i, fs.color || layer.color)
-            featureVisibleMap.set(i, fs.visible !== false)
-          })
+      const id = String(layer.id)
+      // Fingerprint covers the things that would require a visual rebuild
+      const fingerprint = `${layer.geojson?.features?.length}|${layer.color}|${layer.feature_styles?.length ?? 0}`
+
+      if (!kmlLayerGroupsRef.current[id] || kmlDataFingerprintRef.current[id] !== fingerprint) {
+        // Data is new or changed — build the layer group (happens once per city load)
+        if (kmlLayerGroupsRef.current[id] && map.hasLayer(kmlLayerGroupsRef.current[id])) {
+          map.removeLayer(kmlLayerGroupsRef.current[id])
         }
-        // Pre-build per-feature GeoJSON layers with correct color + sparse labels
-        const features = layer.geojson?.features || []
-        const totalFeatures = features.length
+        kmlLayerGroupsRef.current[id] = buildLayerGroup(layer, L)
+        kmlDataFingerprintRef.current[id] = fingerprint
+      }
 
-        // How often to show a label:
-        // - ≤5 features (Metro, IRR, Proposed): label every feature once
-        // - 6–20 features (STRR): every 3rd
-        // - >20 features (PRR=252, Suburban Rail=391): every 50th
-        const labelInterval = totalFeatures <= 5 ? 1 : totalFeatures <= 20 ? 3 : 50
-
-        features.forEach((feature: any, i: number) => {
-          const color = featureColorMap.get(i) || layer.color
-          const visible = featureVisibleMap.get(i) !== false
-          if (!visible) return
-
-          const featureName = feature.properties?.name || feature.properties?.Name || ""
-
-          // Short display names for folders
-          const FOLDER_SHORT: Record<string, string> = {
-            "PRR": "PRR",
-            "BLR Suburban Rail": "Suburban Rail",
-            "Intermediate Ring Road": "IRR",
-            "Satellite Town Ring Road": "STRR",
-            "Under Construction Metro Lines Namma Metro": "Metro UC",
-            "Proposed Lines": "Proposed",
-          }
-          const shortFolder = FOLDER_SHORT[layer.folder_name] || layer.folder_name
-
-          // PRR: just "PRR", no feature detail
-          // Named features (Blue Line, Pink Line etc): "Metro UC • Blue Line"
-          // Others: just short folder name
-          const isPRR = layer.folder_name === "PRR"
-          const labelText = isPRR
-            ? "PRR"
-            : (featureName && featureName !== layer.folder_name && !featureName.startsWith("Feature ")
-                ? `${shortFolder} • ${featureName}`
-                : shortFolder)
-
-          const singleGeoJson = { type: "FeatureCollection", features: [feature] }
-          const geoLayer = L.geoJSON(singleGeoJson, {
-            style: () => ({ color, weight: 3, opacity: 0.85, fillColor: color, fillOpacity: 0.15 }),
-            pointToLayer: (_: any, latlng: any) => {
-              const icon = L.divIcon({
-                className: "",
-                html: `<div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid white;"></div>`,
-                iconSize: [10, 10], iconAnchor: [5, 5],
-              })
-              return L.marker(latlng, { icon })
-            },
-            onEachFeature: (f: any, lyr: any) => {
-              const name = f.properties?.name || f.properties?.Name || layer.folder_name
-              lyr.bindTooltip(`📍 ${name}`, { sticky: true, className: "ps-tooltip" })
-            },
-          })
-          geoLayer.addTo(lg)
-
-          // Add a clean midpoint label marker — always horizontal, never upside down
-          if (i % labelInterval === 0) {
-            try {
-              const geom = feature.geometry
-              let midLat: number | null = null
-              let midLng: number | null = null
-
-              if (geom?.type === "LineString" && geom.coordinates?.length) {
-                const mid = Math.floor(geom.coordinates.length / 2)
-                midLng = geom.coordinates[mid][0]
-                midLat = geom.coordinates[mid][1]
-              } else if (geom?.type === "MultiLineString" && geom.coordinates?.length) {
-                const line = geom.coordinates[0]
-                const mid = Math.floor(line.length / 2)
-                midLng = line[mid][0]
-                midLat = line[mid][1]
-              } else if (geom?.type === "Polygon" && geom.coordinates?.length) {
-                const ring = geom.coordinates[0]
-                const mid = Math.floor(ring.length / 2)
-                midLng = ring[mid][0]
-                midLat = ring[mid][1]
-              }
-
-              if (midLat !== null && midLng !== null) {
-                const labelIcon = L.divIcon({
-                  className: "",
-                  html: `<div style="
-                    background: rgba(255,255,255,0.85);
-                    color: ${color};
-                    font-size: 11px;
-                    font-weight: 700;
-                    font-family: system-ui, sans-serif;
-                    padding: 2px 5px;
-                    border-radius: 3px;
-                    border: 1.5px solid ${color};
-                    white-space: nowrap;
-                    pointer-events: none;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-                  ">${labelText}</div>`,
-                  iconSize: undefined as any,
-                  iconAnchor: [0, 10],
-                })
-                L.marker([midLat, midLng], { icon: labelIcon, interactive: false, zIndexOffset: -100 })
-                  .addTo(lg)
-              }
-            } catch {}
-          }
-        })
-        lg.addTo(map)
-      } catch (e) { console.warn("KML render error", layer.folder_name, e) }
+      // Toggle visibility — no rebuild, just add/remove the pre-built group
+      const lg = kmlLayerGroupsRef.current[id]
+      if (layer.visible && !map.hasLayer(lg)) lg.addTo(map)
+      else if (!layer.visible && map.hasLayer(lg)) map.removeLayer(lg)
     })
-  }, [mapReady, kmlLayers])
+  }, [mapReady, kmlLayers, buildLayerGroup])
 
   return (
     <div className="relative w-full h-screen flex flex-col overflow-hidden bg-gray-900">
