@@ -116,7 +116,7 @@ export const seoConfig: SEOConfig = {
     contact: {
       title: "Contact PropSarathi - Get Expert Real Estate Investment Advice in Dubai & Bangalore",
       description:
-        "Ready to invest in Dubai or Bangalore real estate? Contact PropSarathi for personalized investment advisory. Call +971588660220 (Dubai) or +917090303535 (Bangalore). Free consultation available.",
+        "Ready to invest in Dubai or Bangalore real estate? Contact PropSarathi for personalized investment advisory. Call +917090303535 (India) or +971588660220 (Dubai). Free consultation available.",
       keywords: [
         "contact PropSarathi",
         "Dubai real estate contact",
@@ -141,17 +141,17 @@ export const seoConfig: SEOConfig = {
           contactPoint: [
             {
               "@type": "ContactPoint",
-              telephone: "+971588660220",
-              contactType: "Customer Service",
-              areaServed: "UAE",
-              availableLanguage: ["English", "Hindi", "Arabic"],
-            },
-            {
-              "@type": "ContactPoint",
               telephone: "+917090303535",
               contactType: "Customer Service",
               areaServed: "India",
               availableLanguage: ["English", "Hindi", "Kannada"],
+            },
+            {
+              "@type": "ContactPoint",
+              telephone: "+971588660220",
+              contactType: "Customer Service",
+              areaServed: "UAE",
+              availableLanguage: ["English", "Hindi", "Arabic"],
             },
           ],
         },

@@ -28,7 +28,7 @@ const SuccessModal: React.FC<SuccessModalProps> = ({ isOpen, onClose, userName, 
     message += ` I'd like to speak with a property expert.`
 
     const encodedMessage = encodeURIComponent(message)
-    window.open(`https://wa.me/971588660220?text=${encodedMessage}`, "_blank")
+    window.open(`https://wa.me/917090303535?text=${encodedMessage}`, "_blank")
     onClose()
   }
 
