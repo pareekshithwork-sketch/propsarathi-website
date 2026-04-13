@@ -74,8 +74,12 @@ export default function SharedFooter() {
                 <a href="tel:+917090303535" className="hover:text-[#8b78d4] transition">+91 70903 03535</a>
               </li>
               <li className="flex items-center gap-2 text-sm">
+                <Phone className="w-4 h-4 text-[#8b78d4] shrink-0" />
+                <a href="tel:+971588660220" className="hover:text-[#8b78d4] transition">+971 58 866 0220</a>
+              </li>
+              <li className="flex items-center gap-2 text-sm">
                 <Mail className="w-4 h-4 text-[#8b78d4] shrink-0" />
-                <a href="mailto:enquiry@propsarathi.com" className="hover:text-[#8b78d4] transition">enquiry@propsarathi.com</a>
+                <a href="mailto:Contact@propsarathi.com" className="hover:text-[#8b78d4] transition">Contact@propsarathi.com</a>
               </li>
               <li className="flex items-start gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-[#8b78d4] shrink-0 mt-0.5" />

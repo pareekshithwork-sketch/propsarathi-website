@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import ScrollProgressBar from "@/components/ScrollProgressBar"
 import { PortalProvider } from "@/components/PortalProvider"
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration"
+import WhatsAppButton from "@/components/WhatsAppButton"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -41,6 +42,7 @@ export default function RootLayout({
         <PortalProvider>
           <ScrollProgressBar />
           {children}
+          <WhatsAppButton />
           <ServiceWorkerRegistration />
         </PortalProvider>
         <Analytics />

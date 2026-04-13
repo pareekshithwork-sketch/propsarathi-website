@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import Link from "next/link"
-import { MapPin, Layers, X, ExternalLink, Building2, ChevronLeft } from "lucide-react"
+import { MapPin, X, ExternalLink, Building2, ChevronLeft, ChevronRight, ChevronDown, Layers } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,40 +62,130 @@ function formatPrice(price: number, currency: string) {
   return `₹${(price / 100000).toFixed(0)}L`
 }
 
-// ─── Tile providers ───────────────────────────────────────────────────────────
+// ─── Tile providers (fixed URLs) ──────────────────────────────────────────────
 
 const TILE_PROVIDERS: Record<string, { url: string; opts: any; label: string; icon: string }> = {
-  street:    { label: "Street",    icon: "🗺️", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",                                   opts: { maxZoom: 19 } },
-  street_en: { label: "Street EN", icon: "🗺️", url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",        opts: { maxZoom: 19, subdomains: "abcd" } },
-  satellite: { label: "Satellite", icon: "🛰️", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", opts: { maxZoom: 19 } },
-  terrain:   { label: "Terrain",   icon: "🏔️", url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",                               opts: { maxZoom: 17, subdomains: "abc" } },
-  dark:      { label: "Dark",      icon: "🌙", url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",                   opts: { maxZoom: 19, subdomains: "abcd" } },
-  light:     { label: "Light",     icon: "☀️", url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",                  opts: { maxZoom: 19, subdomains: "abcd" } },
+  street:    { label: "Street",    icon: "🗺️", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",                                             opts: { maxZoom: 19 } },
+  street_en: { label: "Street EN", icon: "🗺️", url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",                      opts: { maxZoom: 19, subdomains: "abcd" } },
+  satellite: { label: "Satellite", icon: "🛰️", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", opts: { maxZoom: 19, attribution: "Tiles © Esri" } },
+  terrain:   { label: "Terrain",   icon: "🏔️", url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",                                           opts: { maxZoom: 17, subdomains: "abc" } },
+  dark:      { label: "Dark",      icon: "🌙", url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",                                  opts: { maxZoom: 19, subdomains: "abcd" } },
+  light:     { label: "Light",     icon: "☀️", url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",                                 opts: { maxZoom: 19, subdomains: "abcd" } },
+}
+
+// ─── Layer group config ───────────────────────────────────────────────────────
+
+const LAYER_GROUPS: { id: string; label: string; icon: string; folderNames: string[] }[] = [
+  {
+    id: "metro",
+    label: "Metro Lines",
+    icon: "🚇",
+    folderNames: [
+      "Under Construction Metro Lines Namma Metro",
+      "Proposed Lines",
+      "Operational Metro",
+      "Namma Metro",
+    ],
+  },
+  {
+    id: "roads",
+    label: "Road Infrastructure",
+    icon: "🛣️",
+    folderNames: ["PRR", "Intermediate Ring Road", "Satellite Town Ring Road", "BLR Suburban Rail"],
+  },
+]
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getGroupForLayer(folderName: string): string | null {
+  for (const g of LAYER_GROUPS) {
+    if (g.folderNames.includes(folderName)) return g.id
+  }
+  return null
+}
+
+/** "all" | "some" | "none" — used to render indeterminate checkbox */
+function groupCheckState(groupId: string, layers: DbLayer[]): "all" | "some" | "none" {
+  const group = LAYER_GROUPS.find(g => g.id === groupId)
+  if (!group) return "none"
+  const matching = layers.filter(l => group.folderNames.includes(l.folder_name))
+  if (matching.length === 0) return "none"
+  const visible = matching.filter(l => l.visible).length
+  if (visible === 0) return "none"
+  if (visible === matching.length) return "all"
+  return "some"
+}
+
+// ─── Checkbox with indeterminate support ──────────────────────────────────────
+
+function Checkbox({ checked, indeterminate, color, onChange }: {
+  checked: boolean
+  indeterminate?: boolean
+  color: string
+  onChange: () => void
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = !!indeterminate
+  }, [indeterminate])
+  return (
+    <div
+      onClick={e => { e.stopPropagation(); onChange() }}
+      className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 cursor-pointer transition-all"
+      style={{ borderColor: color, background: (checked || indeterminate) ? color : "white" }}
+    >
+      {indeterminate
+        ? <span className="text-white text-[10px] leading-none font-bold">─</span>
+        : checked
+          ? <span className="text-white text-[10px] leading-none">✓</span>
+          : null}
+    </div>
+  )
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MapClient() {
-  const mapRef              = useRef<HTMLDivElement>(null)
-  const mapInstanceRef      = useRef<any>(null)
-  const projectsLGRef       = useRef<any>(null)
-  const kmlLayerGroupsRef   = useRef<Record<string, any>>({})
+  const mapRef                = useRef<HTMLDivElement>(null)
+  const mapInstanceRef        = useRef<any>(null)
+  const projectsLGRef         = useRef<any>(null)
+  const kmlLayerGroupsRef     = useRef<Record<string, any>>({})
   const kmlDataFingerprintRef = useRef<Record<string, string>>({})
-  const tileLayerRef        = useRef<any>(null)
+  const tileLayerRef          = useRef<any>(null)
 
   const [city, setCity]               = useState<"Bangalore" | "Dubai">("Bangalore")
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showProjects, setShowProjects] = useState(true)
-  const [showLayers, setShowLayers]   = useState(false)
   const [mapReady, setMapReady]       = useState(false)
   const [mapType, setMapType]         = useState("street")
-  // Local visibility state — not persisted to DB (view-only)
   const [kmlLayers, setKmlLayers]     = useState<DbLayer[]>([])
+
+  // Sidebar open/close — open by default on desktop, closed on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Which groups are expanded (show individual layer checkboxes)
+  const [groupsExpanded, setGroupsExpanded] = useState<Record<string, boolean>>({
+    metro: true,
+    roads: true,
+  })
 
   const CITY_VIEW = {
     Bangalore: { lat: 13.0475, lng: 77.5950, zoom: 11 },
     Dubai:     { lat: 25.1324, lng: 55.2708, zoom: 11 },
   }
+
+  // On mobile, default to closed sidebar
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false)
+    }
+  }, [])
+
+  // ── Invalidate Leaflet size when sidebar opens/closes ───────────────────────
+  useEffect(() => {
+    if (!mapInstanceRef.current) return
+    const t = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 320)
+    return () => clearTimeout(t)
+  }, [sidebarOpen])
 
   // ── Init map ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -111,7 +201,12 @@ export default function MapClient() {
     script.onload = () => {
       const L = (window as any).L
       const view = CITY_VIEW[city]
-      const map = L.map(mapRef.current, { center: [view.lat, view.lng], zoom: view.zoom, zoomControl: false, preferCanvas: true })
+      const map = L.map(mapRef.current, {
+        center: [view.lat, view.lng],
+        zoom: view.zoom,
+        zoomControl: false,
+        preferCanvas: true,
+      })
       const tile = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "", maxZoom: 19 })
       tile.addTo(map)
       tileLayerRef.current = tile
@@ -143,8 +238,7 @@ export default function MapClient() {
     const view = CITY_VIEW[city]
     map.flyTo([view.lat, view.lng], view.zoom, { duration: 1.5 })
     setSelectedProject(null)
-    const defaultType = city === "Dubai" ? "street_en" : "street"
-    setMapType(defaultType)
+    setMapType(city === "Dubai" ? "street_en" : "street")
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city])
 
@@ -152,22 +246,15 @@ export default function MapClient() {
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return
     const map = mapInstanceRef.current
-
     const onMoveEnd = () => {
-      const center = map.getCenter()
-      const lat = center.lat
-      const lng = center.lng
+      const { lat, lng } = map.getCenter()
       for (const [cityName, bounds] of Object.entries(CITY_BOUNDS)) {
         if (lat >= bounds.latMin && lat <= bounds.latMax && lng >= bounds.lngMin && lng <= bounds.lngMax) {
-          setCity(prev => {
-            if (prev !== cityName) return cityName as "Bangalore" | "Dubai"
-            return prev
-          })
+          setCity(prev => prev !== cityName ? cityName as "Bangalore" | "Dubai" : prev)
           break
         }
       }
     }
-
     map.on("moveend", onMoveEnd)
     return () => map.off("moveend", onMoveEnd)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,18 +287,18 @@ export default function MapClient() {
     const map = mapInstanceRef.current
     const provider = TILE_PROVIDERS[mapType] || TILE_PROVIDERS.street
     if (tileLayerRef.current) map.removeLayer(tileLayerRef.current)
-    const newTile = L.tileLayer(provider.url, { ...provider.opts, attribution: "" })
+    const newTile = L.tileLayer(provider.url, { ...provider.opts, attribution: provider.opts.attribution || "" })
     newTile.addTo(map)
     tileLayerRef.current = newTile
   }, [mapReady, mapType])
 
-  // ── Load KML layers — on mount + on tab focus (always fresh) ────────────────
+  // ── Load KML layers ──────────────────────────────────────────────────────────
   const fetchLayers = useCallback((cityName: string) => {
     fetch(`/api/map/layers?city=${cityName}&t=${Date.now()}`, { cache: "no-store" })
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
-          // Always start all layers hidden — user turns them on via the Layers panel
+          // Always start hidden — user opts in via the panel
           setKmlLayers(data.map((l: DbLayer) => ({ ...l, visible: false })))
         }
       })
@@ -219,7 +306,6 @@ export default function MapClient() {
   }, [])
 
   useEffect(() => {
-    // Clear layers immediately so old-city layers vanish before new ones load
     setKmlLayers([])
     fetchLayers(city)
     const onVisible = () => { if (document.visibilityState === "visible") fetchLayers(city) }
@@ -227,7 +313,7 @@ export default function MapClient() {
     return () => document.removeEventListener("visibilitychange", onVisible)
   }, [fetchLayers, city])
 
-  // ── Build a Leaflet layerGroup for a single KML layer (called once per layer) ──
+  // ── Build a Leaflet layerGroup (called once per layer) ────────────────────────
   const buildLayerGroup = useCallback((layer: DbLayer, L: any) => {
     const lg = L.layerGroup()
     try {
@@ -239,49 +325,34 @@ export default function MapClient() {
           featureVisibleMap.set(i, fs.visible !== false)
         })
       }
-
       const features = layer.geojson?.features || []
       const totalFeatures = features.length
-      // Label density: ≤5 features → every feature; 6-20 → every 3rd; >20 (PRR=252, Suburban=391) → every 50th
       const labelInterval = totalFeatures <= 5 ? 1 : totalFeatures <= 20 ? 3 : 50
-
       const FOLDER_SHORT: Record<string, string> = {
-        "PRR": "PRR",
-        "BLR Suburban Rail": "Suburban Rail",
-        "Intermediate Ring Road": "IRR",
-        "Satellite Town Ring Road": "STRR",
-        "Under Construction Metro Lines Namma Metro": "Metro UC",
-        "Proposed Lines": "Proposed",
+        "PRR": "PRR", "BLR Suburban Rail": "Suburban Rail",
+        "Intermediate Ring Road": "IRR", "Satellite Town Ring Road": "STRR",
+        "Under Construction Metro Lines Namma Metro": "Metro UC", "Proposed Lines": "Proposed",
       }
       const shortFolder = FOLDER_SHORT[layer.folder_name] || layer.folder_name
       const isPRR = layer.folder_name === "PRR"
 
       features.forEach((feature: any, i: number) => {
         const color = featureColorMap.get(i) || layer.color
-        const visible = featureVisibleMap.get(i) !== false
-        if (!visible) return
-
+        if (featureVisibleMap.get(i) === false) return
         const featureName = feature.properties?.name || feature.properties?.Name || ""
-        const labelText = isPRR
-          ? "PRR"
+        const labelText = isPRR ? "PRR"
           : (featureName && featureName !== layer.folder_name && !featureName.startsWith("Feature ")
-              ? `${shortFolder} • ${featureName}`
-              : shortFolder)
+              ? `${shortFolder} • ${featureName}` : shortFolder)
 
         const singleGeoJson = { type: "FeatureCollection", features: [feature] }
         const geoLayer = L.geoJSON(singleGeoJson, {
           style: () => ({ color, weight: 3, opacity: 0.85, fillColor: color, fillOpacity: 0.15 }),
           pointToLayer: (_: any, latlng: any) => {
-            const icon = L.divIcon({
-              className: "",
-              html: `<div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid white;"></div>`,
-              iconSize: [10, 10], iconAnchor: [5, 5],
-            })
+            const icon = L.divIcon({ className: "", html: `<div style="background:${color};width:10px;height:10px;border-radius:50%;border:2px solid white;"></div>`, iconSize: [10, 10], iconAnchor: [5, 5] })
             return L.marker(latlng, { icon })
           },
           onEachFeature: (f: any, lyr: any) => {
-            const name = f.properties?.name || f.properties?.Name || layer.folder_name
-            lyr.bindTooltip(`📍 ${name}`, { sticky: true, className: "ps-tooltip" })
+            lyr.bindTooltip(`📍 ${f.properties?.name || f.properties?.Name || layer.folder_name}`, { sticky: true, className: "ps-tooltip" })
           },
         })
         geoLayer.addTo(lg)
@@ -289,28 +360,22 @@ export default function MapClient() {
         if (i % labelInterval === 0) {
           try {
             const geom = feature.geometry
-            let midLat: number | null = null
-            let midLng: number | null = null
-
+            let midLat: number | null = null, midLng: number | null = null
             if (geom?.type === "LineString" && geom.coordinates?.length) {
               const mid = Math.floor(geom.coordinates.length / 2)
-              midLng = geom.coordinates[mid][0]; midLat = geom.coordinates[mid][1]
+              ;[midLng, midLat] = geom.coordinates[mid]
             } else if (geom?.type === "MultiLineString" && geom.coordinates?.length) {
-              const line = geom.coordinates[0]
-              const mid = Math.floor(line.length / 2)
-              midLng = line[mid][0]; midLat = line[mid][1]
+              const line = geom.coordinates[0]; const mid = Math.floor(line.length / 2)
+              ;[midLng, midLat] = line[mid]
             } else if (geom?.type === "Polygon" && geom.coordinates?.length) {
-              const ring = geom.coordinates[0]
-              const mid = Math.floor(ring.length / 2)
-              midLng = ring[mid][0]; midLat = ring[mid][1]
+              const ring = geom.coordinates[0]; const mid = Math.floor(ring.length / 2)
+              ;[midLng, midLat] = ring[mid]
             }
-
             if (midLat !== null && midLng !== null) {
               const labelIcon = L.divIcon({
                 className: "",
                 html: `<div style="background:rgba(255,255,255,0.85);color:${color};font-size:11px;font-weight:700;font-family:system-ui,sans-serif;padding:2px 5px;border-radius:3px;border:1.5px solid ${color};white-space:nowrap;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.2);">${labelText}</div>`,
-                iconSize: undefined as any,
-                iconAnchor: [0, 10],
+                iconSize: undefined as any, iconAnchor: [0, 10],
               })
               L.marker([midLat, midLng], { icon: labelIcon, interactive: false, zIndexOffset: -100 }).addTo(lg)
             }
@@ -321,15 +386,12 @@ export default function MapClient() {
     return lg
   }, [])
 
-  // ── Render KML layers — build once per layer, then only toggle visibility ─────
-  // This avoids re-creating heavy GeoJSON layers on every state change.
-  // Visibility toggle is just map.addLayer / map.removeLayer — instant, no flicker.
+  // ── Render KML layers — build once, toggle visibility only ───────────────────
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return
     const L = (window as any).L
     const map = mapInstanceRef.current
 
-    // Remove layer groups that no longer exist in the current city's data
     const newIds = new Set(kmlLayers.map(l => String(l.id)))
     Object.keys(kmlLayerGroupsRef.current).forEach(id => {
       if (!newIds.has(id)) {
@@ -341,25 +403,44 @@ export default function MapClient() {
 
     kmlLayers.forEach(layer => {
       const id = String(layer.id)
-      // Fingerprint covers the things that would require a visual rebuild
       const fingerprint = `${layer.geojson?.features?.length}|${layer.color}|${layer.feature_styles?.length ?? 0}`
-
       if (!kmlLayerGroupsRef.current[id] || kmlDataFingerprintRef.current[id] !== fingerprint) {
-        // Data is new or changed — build the layer group (happens once per city load)
-        if (kmlLayerGroupsRef.current[id] && map.hasLayer(kmlLayerGroupsRef.current[id])) {
-          map.removeLayer(kmlLayerGroupsRef.current[id])
-        }
+        if (kmlLayerGroupsRef.current[id] && map.hasLayer(kmlLayerGroupsRef.current[id])) map.removeLayer(kmlLayerGroupsRef.current[id])
         kmlLayerGroupsRef.current[id] = buildLayerGroup(layer, L)
         kmlDataFingerprintRef.current[id] = fingerprint
       }
-
-      // Toggle visibility — no rebuild, just add/remove the pre-built group
       const lg = kmlLayerGroupsRef.current[id]
       if (layer.visible && !map.hasLayer(lg)) lg.addTo(map)
       else if (!layer.visible && map.hasLayer(lg)) map.removeLayer(lg)
     })
   }, [mapReady, kmlLayers, buildLayerGroup])
 
+  // ── Layer panel helpers ──────────────────────────────────────────────────────
+  function selectAll() {
+    setShowProjects(true)
+    setKmlLayers(prev => prev.map(l => ({ ...l, visible: true })))
+  }
+  function clearAll() {
+    setShowProjects(false)
+    setKmlLayers(prev => prev.map(l => ({ ...l, visible: false })))
+  }
+  function toggleGroupLayers(groupId: string) {
+    const group = LAYER_GROUPS.find(g => g.id === groupId)
+    if (!group) return
+    const state = groupCheckState(groupId, kmlLayers)
+    const target = state !== "all"
+    setKmlLayers(prev => prev.map(l =>
+      group.folderNames.includes(l.folder_name) ? { ...l, visible: target } : l
+    ))
+  }
+  function toggleGroupExpanded(groupId: string) {
+    setGroupsExpanded(prev => ({ ...prev, [groupId]: !prev[groupId] }))
+  }
+
+  // ── Layers that don't belong to any group ────────────────────────────────────
+  const ungroupedLayers = kmlLayers.filter(l => !getGroupForLayer(l.folder_name))
+
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="relative w-full h-screen flex flex-col overflow-hidden bg-gray-900">
       <style>{`
@@ -381,6 +462,7 @@ export default function MapClient() {
           </div>
           <span className="font-bold text-gray-800 text-sm">PropSarathi Investment Map</span>
         </div>
+        {/* City switcher */}
         <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-xl p-1">
           {(["Bangalore", "Dubai"] as const).map(c => (
             <button key={c} onClick={() => setCity(c)}
@@ -389,148 +471,241 @@ export default function MapClient() {
             </button>
           ))}
         </div>
-        <button onClick={() => setShowLayers(!showLayers)}
-          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-all ${showLayers ? "bg-[#422D83] text-white border-[#422D83]" : "bg-white text-gray-600 border-gray-200 hover:border-[#422D83]"}`}>
+        {/* Mobile sidebar toggle */}
+        <button onClick={() => setSidebarOpen(v => !v)}
+          className="md:hidden flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border border-gray-200 bg-white text-gray-600 hover:border-[#422D83] transition">
           <Layers className="w-4 h-4" />
-          <span className="hidden sm:block">Layers</span>
         </button>
       </div>
 
-      {/* ── Layers panel (view-only) ── */}
-      {showLayers && (
-        <div className="absolute top-[60px] right-4 z-[1001] bg-white rounded-2xl shadow-xl border border-gray-100 p-4 w-64 max-h-[80vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Map Layers</p>
-            <button onClick={() => setShowLayers(false)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
-          </div>
+      {/* ── Body: sidebar + map ── */}
+      <div className="flex flex-1 overflow-hidden mt-[56px] relative">
 
-          {/* Our Projects toggle */}
-          <div className="mb-3">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 px-1">Projects</p>
-            <button onClick={() => setShowProjects(v => !v)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors">
-              <div className="w-4 h-4 rounded border-2 flex items-center justify-center transition-all"
-                style={{ borderColor: "#422D83", background: showProjects ? "#422D83" : "white" }}>
-                {showProjects && <span className="text-white text-xs">✓</span>}
+        {/* Mobile overlay backdrop */}
+        {sidebarOpen && (
+          <div className="md:hidden absolute inset-0 bg-black/40 z-[800]" onClick={() => setSidebarOpen(false)} />
+        )}
+
+        {/* ── Left sidebar panel ── */}
+        <div className={`
+          absolute md:relative z-[900]
+          h-full bg-white border-r border-gray-200 flex-shrink-0
+          overflow-hidden transition-all duration-300 ease-in-out
+          ${sidebarOpen ? "w-72 shadow-2xl md:shadow-none" : "w-0"}
+        `}>
+          <div className="w-72 h-full flex flex-col overflow-hidden">
+
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#422D83]" />
+                <span className="font-bold text-sm text-gray-800">Map Layers</span>
               </div>
-              <span className="text-sm font-medium text-gray-700">Our Projects</span>
-              <div className="ml-auto w-3 h-3 rounded-full shrink-0" style={{ background: "#422D83" }} />
-            </button>
-          </div>
+              <button onClick={() => setSidebarOpen(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-          {/* Status legend */}
-          <div className="mb-3 px-1">
-            {Object.entries(STATUS_COLOR).map(([status, color]) => (
-              <div key={status} className="flex items-center gap-2 py-0.5">
-                <div className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
-                <span className="text-xs text-gray-500">{status}</span>
-              </div>
-            ))}
-          </div>
+            {/* Select All / Clear All */}
+            <div className="flex gap-2 px-4 py-3 border-b border-gray-100 flex-shrink-0">
+              <button onClick={selectAll}
+                className="flex-1 py-2 bg-[#422D83] hover:bg-[#2d1a60] text-white text-xs font-semibold rounded-xl transition">
+                Select All
+              </button>
+              <button onClick={clearAll}
+                className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition">
+                Clear All
+              </button>
+            </div>
 
-          {/* KML layers — local toggle only (view-only, no DB write) */}
-          {kmlLayers.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Map Layers</p>
-              <div className="space-y-1">
-                {kmlLayers.map(layer => (
-                  <button
-                    key={layer.id}
-                    onClick={() => setKmlLayers(prev => prev.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l))}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="w-4 h-4 rounded border-2 flex items-center justify-center transition-all flex-shrink-0"
-                      style={{ borderColor: layer.color, background: layer.visible ? layer.color : "white" }}>
-                      {layer.visible && <span className="text-white text-xs leading-none">✓</span>}
+            {/* Scrollable layer list */}
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+
+              {/* ── Our Projects ── */}
+              <div className="mb-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 px-1">Projects</p>
+                <button onClick={() => setShowProjects(v => !v)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                  <Checkbox checked={showProjects} color="#422D83" onChange={() => setShowProjects(v => !v)} />
+                  <span className="text-sm font-medium text-gray-700 flex-1 text-left">Our Projects</span>
+                  <div className="w-3 h-3 rounded-full shrink-0" style={{ background: "#422D83" }} />
+                </button>
+                {/* Status legend */}
+                <div className="px-10 pb-1">
+                  {Object.entries(STATUS_COLOR).map(([status, color]) => (
+                    <div key={status} className="flex items-center gap-2 py-0.5">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
+                      <span className="text-[11px] text-gray-400">{status}</span>
                     </div>
-                    <span className="text-sm font-medium text-gray-700 flex-1 text-left truncate">{layer.folder_name}</span>
-                    <div className="ml-auto w-3 h-3 rounded-full shrink-0" style={{ background: layer.color }} />
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Layer groups ── */}
+              {LAYER_GROUPS.map(group => {
+                const groupLayers = kmlLayers.filter(l => group.folderNames.includes(l.folder_name))
+                if (groupLayers.length === 0) return null
+                const state = groupCheckState(group.id, kmlLayers)
+                const expanded = groupsExpanded[group.id] ?? true
+
+                return (
+                  <div key={group.id} className="mt-2 border border-gray-100 rounded-xl overflow-hidden">
+                    {/* Group header row */}
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors">
+                      <Checkbox
+                        checked={state === "all"}
+                        indeterminate={state === "some"}
+                        color="#422D83"
+                        onChange={() => toggleGroupLayers(group.id)}
+                      />
+                      <span className="text-sm font-semibold text-gray-700 flex-1">{group.icon} {group.label}</span>
+                      <button onClick={() => toggleGroupExpanded(group.id)}
+                        className="p-0.5 text-gray-400 hover:text-gray-600 transition">
+                        <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "" : "-rotate-90"}`} />
+                      </button>
+                    </div>
+                    {/* Individual layers */}
+                    {expanded && (
+                      <div className="divide-y divide-gray-50">
+                        {groupLayers.map(layer => (
+                          <button key={layer.id}
+                            onClick={() => setKmlLayers(prev => prev.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l))}
+                            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors">
+                            <Checkbox checked={layer.visible} color={layer.color} onChange={() => setKmlLayers(prev => prev.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l))} />
+                            <span className="text-xs font-medium text-gray-600 flex-1 text-left truncate">{layer.folder_name}</span>
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: layer.color }} />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* ── Ungrouped layers (if any) ── */}
+              {ungroupedLayers.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 px-1">Other Layers</p>
+                  {ungroupedLayers.map(layer => (
+                    <button key={layer.id}
+                      onClick={() => setKmlLayers(prev => prev.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l))}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 transition-colors">
+                      <Checkbox checked={layer.visible} color={layer.color} onChange={() => setKmlLayers(prev => prev.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l))} />
+                      <span className="text-sm font-medium text-gray-700 flex-1 text-left truncate">{layer.folder_name}</span>
+                      <div className="w-3 h-3 rounded-full shrink-0" style={{ background: layer.color }} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Map Style section ── */}
+            <div className="border-t border-gray-100 px-4 py-3 flex-shrink-0">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Map Style</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {Object.entries(TILE_PROVIDERS).map(([key, p]) => (
+                  <button key={key} onClick={() => setMapType(key)}
+                    className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl text-[11px] font-medium transition-all ${
+                      mapType === key
+                        ? "bg-[#422D83] text-white shadow-sm"
+                        : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                    }`}>
+                    <span className="text-base leading-none">{p.icon}</span>
+                    <span className="leading-none">{p.label}</span>
                   </button>
                 ))}
               </div>
             </div>
+
+          </div>
+        </div>
+
+        {/* ── Sidebar toggle tab ── */}
+        <button
+          onClick={() => setSidebarOpen(v => !v)}
+          className={`
+            hidden md:flex absolute top-1/2 -translate-y-1/2 z-[950]
+            items-center justify-center
+            w-5 h-12 bg-white border border-l-0 border-gray-200
+            rounded-r-lg shadow-md hover:bg-gray-50 transition-all duration-300
+            ${sidebarOpen ? "left-72" : "left-0"}
+          `}
+          title={sidebarOpen ? "Collapse panel" : "Expand panel"}
+        >
+          {sidebarOpen
+            ? <ChevronLeft className="w-3.5 h-3.5 text-gray-500" />
+            : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
+        </button>
+
+        {/* ── Map ── */}
+        <div className="flex-1 relative h-full">
+          <div ref={mapRef} className="w-full h-full" />
+
+          {/* ── Project detail panel ── */}
+          {selectedProject && (
+            <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-[500] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+              <div className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                        style={{ background: STATUS_COLOR[selectedProject.status] || "#422D83" }}>
+                        {selectedProject.status}
+                      </span>
+                      <span className="text-xs text-gray-400">{selectedProject.type}</span>
+                    </div>
+                    <h3 className="font-bold text-gray-800 text-base leading-tight">{selectedProject.name}</h3>
+                    <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />{selectedProject.location}
+                    </p>
+                  </div>
+                  <button onClick={() => setSelectedProject(null)} className="text-gray-400 hover:text-gray-600 ml-2">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 mb-3">
+                  <div>
+                    <p className="text-xs text-gray-400">Price Range</p>
+                    <p className="font-bold text-[#422D83] text-sm">
+                      {formatPrice(selectedProject.minPrice, selectedProject.currency)} – {formatPrice(selectedProject.maxPrice, selectedProject.currency)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400">Developer</p>
+                    <p className="font-semibold text-gray-700 text-xs">{selectedProject.developer}</p>
+                  </div>
+                </div>
+                <Link href={`/properties/${selectedProject.slug}`}
+                  className="flex items-center justify-center gap-2 w-full bg-[#422D83] hover:bg-[#2d1a60] text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
+                  <ExternalLink className="w-4 h-4" />
+                  View Project Details
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* ── Stats bar ── */}
+          {!selectedProject && (
+            <div className="absolute bottom-4 left-4 z-[499]">
+              <div className="bg-white/95 backdrop-blur rounded-xl shadow px-3 py-2 border border-gray-100">
+                <p className="text-xs text-gray-500 font-medium">{city === "Bangalore" ? "🇮🇳" : "🇦🇪"} {city}</p>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-xs flex items-center gap-1 text-[#422D83]">
+                    <Building2 className="w-3 h-3" />
+                    <strong>{PROJECTS.filter(p => p.city === city).length}</strong> Projects
+                  </span>
+                  {kmlLayers.length > 0 && (
+                    <span className="text-xs text-gray-400">
+                      + <strong>{kmlLayers.length}</strong> layer{kmlLayers.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
-      )}
 
-      {/* ── Map ── */}
-      <div ref={mapRef} className="flex-1 mt-[56px]" />
-
-      {/* ── Project detail panel ── */}
-      {selectedProject && (
-        <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-[1000] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-          <div className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
-                    style={{ background: STATUS_COLOR[selectedProject.status] || "#422D83" }}>
-                    {selectedProject.status}
-                  </span>
-                  <span className="text-xs text-gray-400">{selectedProject.type}</span>
-                </div>
-                <h3 className="font-bold text-gray-800 text-base leading-tight">{selectedProject.name}</h3>
-                <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />{selectedProject.location}
-                </p>
-              </div>
-              <button onClick={() => setSelectedProject(null)} className="text-gray-400 hover:text-gray-600 ml-2">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 mb-3">
-              <div>
-                <p className="text-xs text-gray-400">Price Range</p>
-                <p className="font-bold text-[#422D83] text-sm">
-                  {formatPrice(selectedProject.minPrice, selectedProject.currency)} – {formatPrice(selectedProject.maxPrice, selectedProject.currency)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-400">Developer</p>
-                <p className="font-semibold text-gray-700 text-xs">{selectedProject.developer}</p>
-              </div>
-            </div>
-            <Link href={`/properties/${selectedProject.slug}`}
-              className="flex items-center justify-center gap-2 w-full bg-[#422D83] hover:bg-[#2d1a60] text-white font-semibold rounded-xl py-2.5 text-sm transition-colors">
-              <ExternalLink className="w-4 h-4" />
-              View Project Details
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* ── Map type switcher ── */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-1 bg-white/95 backdrop-blur rounded-xl shadow border border-gray-100 p-1">
-        {Object.entries(TILE_PROVIDERS).map(([key, p]) => (
-          <button key={key} onClick={() => setMapType(key)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              mapType === key ? "bg-[#422D83] text-white" : "text-gray-600 hover:bg-gray-100"
-            }`}>
-            <span>{p.icon}</span>
-            <span className="hidden sm:block">{p.label}</span>
-          </button>
-        ))}
       </div>
-
-      {/* ── Stats bar ── */}
-      {!selectedProject && (
-        <div className="absolute bottom-4 left-4 z-[999]">
-          <div className="bg-white/95 backdrop-blur rounded-xl shadow px-3 py-2 border border-gray-100">
-            <p className="text-xs text-gray-500 font-medium">{city === "Bangalore" ? "🇮🇳" : "🇦🇪"} {city}</p>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-xs flex items-center gap-1 text-[#422D83]">
-                <Building2 className="w-3 h-3" />
-                <strong>{PROJECTS.filter(p => p.city === city).length}</strong> Projects
-              </span>
-              {kmlLayers.length > 0 && (
-                <span className="text-xs text-gray-400">
-                  + <strong>{kmlLayers.length}</strong> KML layer{kmlLayers.length !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

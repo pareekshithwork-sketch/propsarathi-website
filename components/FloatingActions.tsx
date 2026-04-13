@@ -322,7 +322,7 @@ const FloatingActions: React.FC<FloatingActionsProps> = ({ externalShowEnquiryFo
     <>
       <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-30 flex flex-col gap-3 md:gap-4">
         <a
-          href="https://wa.me/917090303535"
+          href="https://wa.me/971588660220"
           target="_blank"
           rel="noopener noreferrer"
           className="group relative bg-white hover:bg-gray-50 rounded-full p-2 md:p-2.5 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-110 animate-bounce-slow"

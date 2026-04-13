@@ -64,7 +64,7 @@ const PropertyCard: React.FC<{
     const message = encodeURIComponent(
       `Hi, I'm interested in ${property.title} located at ${property.location}. Price: ${property.price}. Can you provide more details?`,
     )
-    const whatsappUrl = `https://wa.me/917090303535?text=${message}`
+    const whatsappUrl = `https://wa.me/971588660220?text=${message}`
     window.open(whatsappUrl, "_blank")
   }
 
@@ -302,7 +302,7 @@ const FeaturedProperties: React.FC = () => {
                   const message = encodeURIComponent(
                     `Hi, I'm interested in ${selectedProperty.title} located at ${selectedProperty.location}. Price: ${selectedProperty.price}. Can you provide more details?`,
                   )
-                  const whatsappUrl = `https://wa.me/917090303535?text=${message}`
+                  const whatsappUrl = `https://wa.me/971588660220?text=${message}`
                   window.open(whatsappUrl, "_blank")
                 }}
                 className="w-full bg-primary text-white font-bold py-3 px-6 rounded-lg hover:bg-primary/90 transition-all duration-300 transform hover:scale-105"
