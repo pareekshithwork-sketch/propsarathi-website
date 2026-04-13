@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Allow: /properties
+Allow: /properties/*
+Allow: /blog
+Allow: /blog/*
+Allow: /about
+Allow: /contact
+
+Disallow: /crm
+Disallow: /crm/*
+Disallow: /admin
+Disallow: /blog-admin
+Disallow: /api/
+Disallow: /partner-portal
+
+Sitemap: https://www.propsarathi.com/sitemap.xml

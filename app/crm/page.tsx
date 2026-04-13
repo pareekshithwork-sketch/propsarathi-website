@@ -1,0 +1,2276 @@
+"use client"
+
+import React, { useState, useEffect, useMemo, useCallback } from "react"
+import {
+  LayoutDashboard, Users, Database, ChevronLeft, ChevronRight,
+  Plus, Search, LogOut, Edit2, Trash2, Phone, Mail, MessageCircle,
+  Download, Clock, ArrowLeft, MoreHorizontal, X, Check,
+  ChevronDown, AlertCircle, Calendar, MapPin, Loader2,
+  TrendingUp, FileText, Building2, User, Menu, Bell,
+  PhoneCall, PhoneOff, Eye, RefreshCw, Star, Flag,
+  CheckCircle2, XCircle, Activity, BarChart3, Filter,
+  ChevronUp, Bookmark, Home, Briefcase, DollarSign,
+} from "lucide-react"
+import MapEditor from "@/components/MapEditor"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Lead {
+  leadId: string
+  createdAt: string
+  source: string
+  subSource: string
+  partnerId: string
+  partnerName: string
+  clientName: string
+  phone: string
+  altPhone: string
+  landline: string
+  countryCode: string
+  email: string
+  city: string
+  propertyType: string
+  budget: string
+  minBudget: string
+  maxBudget: string
+  assignedRM: string
+  secondaryOwner: string
+  status: string
+  subStatus: string
+  tags: string
+  notes: string
+  lastNote: string
+  referralName: string
+  referralPhone: string
+  referralEmail: string
+  profession: string
+  company: string
+  designation: string
+  gender: string
+  dob: string
+  maritalStatus: string
+  sourcingManager: string
+  closingManager: string
+  possessionDate: string
+  enquiredLocation: string
+  purpose: string
+  buyer: string
+  paymentPlan: string
+  channelPartner: string
+  carpetArea: string
+  saleableArea: string
+  enquiredFor: string
+  projectEnquired: string
+  scheduledAt: string
+  bookedName: string
+  bookedDate: string
+  agreementValue: string
+  isDeleted: boolean
+  isDuplicate: boolean
+  lastUpdated: string
+}
+
+interface DataRecord {
+  dataId: string
+  createdAt: string
+  source: string
+  name: string
+  phone: string
+  countryCode: string
+  email: string
+  dob: string
+  gender: string
+  subSource: string
+  carpetArea: string
+  notes: string
+  status: string
+  converted: string
+  convertedLeadId: string
+  lastUpdated: string
+}
+
+interface HistoryEntry {
+  recordId: string
+  recordType: string
+  timestamp: string
+  action: string
+  changedBy: string
+  oldStatus: string
+  newStatus: string
+  notes: string
+}
+
+interface CRMUser {
+  name: string
+  email: string
+  role: string
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const RM_LIST = ["Pareekshith Rawal", "Kushal Rawal", "Anil Kumar", "Siva Kali"]
+
+const SOURCE_OPTIONS = [
+  "Direct", "WhatsApp", "Facebook", "Google Ads", "LinkedIn",
+  "99 Acres", "Housing.com", "Magic Bricks", "QuikrHomes", "IVR",
+  "Referral", "Walk In", "Website", "YouTube", "Gmail",
+  "Cold Call", "JustLead", "Partner Portal", "Other"
+]
+
+const CALLBACK_SUBS = [
+  "Follow Up", "Future Prospect/Project", "Not Reachable", "Busy",
+  "To Schedule A Meeting", "Not Answered", "Need More Info",
+  "To Schedule Site Visit", "Plan Postponed"
+]
+const MEETING_SUBS = ["On Call", "In Person", "Others", "Online"]
+const SITE_VISIT_SUBS = ["First Visit", "Revisit"]
+const NOT_INTERESTED_SUBS = ["Different Location", "Different Requirements", "Unmatched Budget"]
+const DROP_SUBS = ["Not Enquired", "Wrong/Invalid No", "Ringing Not Received", "Not Looking", "Purchased From Others"]
+const EOI_SUBS = ["Given EOI"]
+
+const STATUS_COLORS: Record<string, string> = {
+  New: "bg-blue-100 text-blue-700 border-blue-200",
+  Callback: "bg-amber-100 text-amber-700 border-amber-200",
+  Meeting: "bg-indigo-100 text-indigo-700 border-indigo-200",
+  "Site Visit": "bg-purple-100 text-purple-700 border-purple-200",
+  "Expression of Interest": "bg-orange-100 text-orange-700 border-orange-200",
+  Booked: "bg-[#ede9f8] text-[#371f6e] border-[#c4b8ef]",
+  "Not Interested": "bg-gray-100 text-gray-600 border-gray-200",
+  Dropped: "bg-red-100 text-red-700 border-red-200",
+}
+
+const STATUS_DOT: Record<string, string> = {
+  New: "bg-blue-500",
+  Callback: "bg-amber-500",
+  Meeting: "bg-indigo-500",
+  "Site Visit": "bg-purple-500",
+  "Expression of Interest": "bg-orange-500",
+  Booked: "bg-violet-700",
+  "Not Interested": "bg-gray-400",
+  Dropped: "bg-red-500",
+}
+
+const EMPTY_LEAD_FORM: Partial<Lead> = {
+  source: "Direct", subSource: "", partnerId: "", partnerName: "",
+  clientName: "", phone: "", altPhone: "", landline: "", countryCode: "+91",
+  email: "", city: "", propertyType: "", budget: "", minBudget: "", maxBudget: "",
+  assignedRM: "", secondaryOwner: "", status: "New", subStatus: "", tags: "", notes: "",
+  referralName: "", referralPhone: "", referralEmail: "",
+  profession: "", company: "", designation: "", gender: "", dob: "", maritalStatus: "",
+  sourcingManager: "", closingManager: "", possessionDate: "", enquiredLocation: "",
+  purpose: "", buyer: "", paymentPlan: "", channelPartner: "", carpetArea: "", saleableArea: "",
+  enquiredFor: "", projectEnquired: "", scheduledAt: "",
+}
+
+// ─── Helper Components ────────────────────────────────────────────────────────
+
+function TagBadge({ tag }: { tag: string }) {
+  const colors: Record<string, string> = {
+    "MND-1": "bg-purple-600 text-white",
+    "DC": "bg-blue-600 text-white",
+    "SVND-1": "bg-indigo-600 text-white",
+    "Hot": "bg-red-500 text-white",
+    "Warm": "bg-orange-500 text-white",
+    "Cold": "bg-blue-400 text-white",
+    "Escalated": "bg-yellow-500 text-white",
+  }
+  return (
+    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${colors[tag] || "bg-gray-200 text-gray-700"}`}>
+      {tag}
+    </span>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cls = STATUS_COLORS[status] || "bg-gray-100 text-gray-600 border-gray-200"
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
+      {status}
+    </span>
+  )
+}
+
+function RMInitial({ name, color = "bg-blue-500" }: { name: string; color?: string }) {
+  if (!name) return null
+  return (
+    <span title={name} className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold flex-shrink-0 ${color}`}>
+      {name.charAt(0).toUpperCase()}
+    </span>
+  )
+}
+
+function FormField({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-gray-600">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function Input({ className = "", ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${className}`}
+    />
+  )
+}
+
+function Select({ className = "", children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { children: React.ReactNode }) {
+  return (
+    <select
+      {...props}
+      className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white ${className}`}
+    >
+      {children}
+    </select>
+  )
+}
+
+function Textarea({ className = "", ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${className}`}
+    />
+  )
+}
+
+// ─── Main CRM Page ────────────────────────────────────────────────────────────
+
+export default function CRMPage() {
+  // ── Auth ──
+  const [authState, setAuthState] = useState<"loading" | "login" | "crm">("loading")
+  const [user, setUser] = useState<CRMUser | null>(null)
+  const [loginEmail, setLoginEmail] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
+  const [loginError, setLoginError] = useState("")
+  const [loginLoading, setLoginLoading] = useState(false)
+
+  // ── View ──
+  const [view, setView] = useState<"dashboard" | "leads" | "data" | "map">("dashboard")
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [search, setSearch] = useState("")
+
+  // ── Data ──
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [dataRecords, setDataRecords] = useState<DataRecord[]>([])
+  const [stats, setStats] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+
+  // ── Lead detail ──
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [leadHistory, setLeadHistory] = useState<HistoryEntry[]>([])
+  const [detailTab, setDetailTab] = useState<"overview" | "status" | "history" | "notes" | "document">("overview")
+  const [leadFilter, setLeadFilter] = useState("All")
+  const [activeLeadTab, setActiveLeadTab] = useState("All")
+
+  // ── Status action ──
+  const [showStatusAction, setShowStatusAction] = useState<{ action: string; sub?: string } | null>(null)
+  const [selectedSubStatus, setSelectedSubStatus] = useState("")
+  const [statusNote, setStatusNote] = useState("")
+  const [statusSchedule, setStatusSchedule] = useState("")
+  const [bookingForm, setBookingForm] = useState({ bookedName: "", bookedDate: "", agreementValue: "", property: "" })
+  const [savingStatus, setSavingStatus] = useState(false)
+
+  // ── Add/Edit Lead modal ──
+  const [showAddLead, setShowAddLead] = useState(false)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null)
+  const [addLeadTab, setAddLeadTab] = useState<"leadinfo" | "enquiry" | "additional" | "others" | "notes">("leadinfo")
+  const [leadForm, setLeadForm] = useState<Partial<Lead>>(EMPTY_LEAD_FORM)
+  const [savingLead, setSavingLead] = useState(false)
+
+  // ── Data section ──
+  const [selectedData, setSelectedData] = useState<DataRecord | null>(null)
+  const [showAddData, setShowAddData] = useState(false)
+  const [newData, setNewData] = useState({ source: "Direct", name: "", phone: "", countryCode: "+91", email: "", dob: "", gender: "", notes: "" })
+  const [savingData, setSavingData] = useState(false)
+  const [showConvert, setShowConvert] = useState(false)
+  const [convertForm, setConvertForm] = useState({ assignedRM: "", budget: "", propertyType: "", city: "", source: "Walk In" })
+  const [dataFilter, setDataFilter] = useState("All")
+  const [dataSearch, setDataSearch] = useState("")
+
+  // ── Notes ──
+  const [addNoteText, setAddNoteText] = useState("")
+  const [savingNote, setSavingNote] = useState(false)
+
+  // ── Auth check on mount ──
+  useEffect(() => {
+    fetch("/api/crm/auth/me")
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.user) {
+          setUser(d.user)
+          setAuthState("crm")
+        } else {
+          setAuthState("login")
+        }
+      })
+      .catch(() => setAuthState("login"))
+  }, [])
+
+  // ── Load data when crm unlocked ──
+  useEffect(() => {
+    if (authState === "crm") {
+      loadAll()
+    }
+  }, [authState])
+
+  async function loadAll() {
+    setLoading(true)
+    try {
+      const [leadsRes, dataRes, statsRes] = await Promise.all([
+        fetch("/api/crm/leads"),
+        fetch("/api/crm/data"),
+        fetch("/api/crm/stats"),
+      ])
+      const [ld, dd, sd] = await Promise.all([leadsRes.json(), dataRes.json(), statsRes.json()])
+      if (ld.success) setLeads(ld.leads || [])
+      if (dd.success) setDataRecords(dd.records || [])
+      if (sd.success) setStats(sd.stats)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setLoginError("")
+    setLoginLoading(true)
+    try {
+      const res = await fetch("/api/crm/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setUser(data.user)
+        setAuthState("crm")
+      } else {
+        setLoginError(data.message || "Invalid credentials")
+      }
+    } catch {
+      setLoginError("Network error")
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  async function handleLogout() {
+    await fetch("/api/crm/auth/logout", { method: "POST" })
+    setUser(null)
+    setAuthState("login")
+  }
+
+  // ── Lead selection ──
+  async function selectLead(lead: Lead | null) {
+    if (!lead) { setSelectedLead(null); return }
+    setSelectedLead(lead)
+    setDetailTab("overview")
+    setShowStatusAction(null)
+    try {
+      const res = await fetch(`/api/crm/leads/${lead.leadId}`)
+      const d = await res.json()
+      if (d.success) {
+        setSelectedLead(d.lead)
+        setLeadHistory(d.history || [])
+      }
+    } catch {}
+  }
+
+  // ── Status action ──
+  async function saveStatusAction(goNext = false) {
+    if (!selectedLead || !showStatusAction) return
+    setSavingStatus(true)
+    try {
+      const body: any = {
+        status: showStatusAction.action,
+        subStatus: selectedSubStatus,
+        notes: statusNote,
+        action: `Status set to ${showStatusAction.action}`,
+      }
+      if (showStatusAction.action === "Callback" || showStatusAction.action === "Meeting" || showStatusAction.action === "Site Visit") {
+        body.scheduledAt = statusSchedule
+      }
+      if (showStatusAction.action === "Booked") {
+        body.bookedName = bookingForm.bookedName
+        body.bookedDate = bookingForm.bookedDate
+        body.agreementValue = bookingForm.agreementValue
+        body.projectEnquired = bookingForm.property
+      }
+      if (statusNote) body.lastNote = statusNote
+
+      await fetch(`/api/crm/leads/${selectedLead.leadId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+
+      // Update local state
+      const updated = { ...selectedLead, status: showStatusAction.action, subStatus: selectedSubStatus, lastNote: statusNote, scheduledAt: statusSchedule }
+      setSelectedLead(updated)
+      setLeads(prev => prev.map(l => l.leadId === updated.leadId ? updated : l))
+
+      setShowStatusAction(null)
+      setSelectedSubStatus("")
+      setStatusNote("")
+      setStatusSchedule("")
+      setBookingForm({ bookedName: "", bookedDate: "", agreementValue: "", property: "" })
+
+      if (goNext) {
+        const idx = filteredLeads.findIndex(l => l.leadId === selectedLead.leadId)
+        if (idx >= 0 && idx < filteredLeads.length - 1) {
+          selectLead(filteredLeads[idx + 1])
+        }
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
+  async function saveNote() {
+    if (!selectedLead || !addNoteText.trim()) return
+    setSavingNote(true)
+    try {
+      await fetch(`/api/crm/leads/${selectedLead.leadId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lastNote: addNoteText }),
+      })
+      const updated = { ...selectedLead, lastNote: addNoteText }
+      setSelectedLead(updated)
+      setLeads(prev => prev.map(l => l.leadId === updated.leadId ? updated : l))
+      setAddNoteText("")
+      // Refresh history
+      const res = await fetch(`/api/crm/leads/${selectedLead.leadId}`)
+      const d = await res.json()
+      if (d.success) setLeadHistory(d.history || [])
+    } catch {}
+    setSavingNote(false)
+  }
+
+  async function deleteLead(lead: Lead) {
+    if (!confirm(`Delete lead ${lead.clientName}? This can be recovered.`)) return
+    await fetch(`/api/crm/leads/${lead.leadId}`, { method: "DELETE" })
+    setLeads(prev => prev.filter(l => l.leadId !== lead.leadId))
+    if (selectedLead?.leadId === lead.leadId) setSelectedLead(null)
+  }
+
+  // ── Add/Edit Lead ──
+  function openAddLead() {
+    setEditingLead(null)
+    setLeadForm({ ...EMPTY_LEAD_FORM })
+    setAddLeadTab("leadinfo")
+    setShowAddLead(true)
+  }
+
+  function openEditLead(lead: Lead) {
+    setEditingLead(lead)
+    setLeadForm({ ...lead })
+    setAddLeadTab("leadinfo")
+    setShowAddLead(true)
+  }
+
+  async function saveLead() {
+    if (!leadForm.clientName || !leadForm.phone) return
+    setSavingLead(true)
+    try {
+      if (editingLead) {
+        await fetch(`/api/crm/leads/${editingLead.leadId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(leadForm),
+        })
+        setLeads(prev => prev.map(l => l.leadId === editingLead.leadId ? { ...l, ...leadForm } as Lead : l))
+        if (selectedLead?.leadId === editingLead.leadId) setSelectedLead({ ...selectedLead, ...leadForm } as Lead)
+      } else {
+        const res = await fetch("/api/crm/leads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(leadForm),
+        })
+        const d = await res.json()
+        if (d.success) {
+          const newLead: Lead = { ...EMPTY_LEAD_FORM, ...leadForm, leadId: d.leadId, createdAt: new Date().toLocaleString("en-IN"), lastUpdated: new Date().toLocaleString("en-IN"), isDeleted: false, isDuplicate: false } as Lead
+          setLeads(prev => [newLead, ...prev])
+        }
+      }
+      setShowAddLead(false)
+    } catch {}
+    setSavingLead(false)
+  }
+
+  // ── Add Data ──
+  async function saveData() {
+    if (!newData.name || !newData.phone) return
+    setSavingData(true)
+    try {
+      const res = await fetch("/api/crm/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newData),
+      })
+      const d = await res.json()
+      if (d.success) {
+        const rec: DataRecord = { ...newData, dataId: d.dataId, createdAt: new Date().toLocaleString("en-IN"), status: "New", converted: "No", convertedLeadId: "", carpetArea: "", subSource: "", lastUpdated: "" }
+        setDataRecords(prev => [rec, ...prev])
+        setShowAddData(false)
+        setNewData({ source: "Direct", name: "", phone: "", countryCode: "+91", email: "", dob: "", gender: "", notes: "" })
+      }
+    } catch {}
+    setSavingData(false)
+  }
+
+  // ── Convert Data to Lead ──
+  async function convertToLead() {
+    if (!selectedData) return
+    setSavingData(true)
+    try {
+      const res = await fetch("/api/crm/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...convertForm,
+          clientName: selectedData.name,
+          phone: selectedData.phone,
+          countryCode: selectedData.countryCode,
+          email: selectedData.email,
+          source: selectedData.source,
+          status: "New",
+        }),
+      })
+      const d = await res.json()
+      if (d.success) {
+        await fetch(`/api/crm/data/${selectedData.dataId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ converted: true, convertedLeadId: d.leadId }),
+        })
+        setDataRecords(prev => prev.map(r => r.dataId === selectedData.dataId ? { ...r, converted: "Yes", convertedLeadId: d.leadId } : r))
+        setShowConvert(false)
+        await loadAll()
+      }
+    } catch {}
+    setSavingData(false)
+  }
+
+  // ── Filtered leads ──
+  const filteredLeads = useMemo(() => {
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
+    return leads.filter(l => {
+      if (l.isDeleted && leadFilter !== "Deleted") return false
+
+      if (activeLeadTab === "New" && l.status !== "New") return false
+      if (activeLeadTab === "Pending" && l.status !== "Callback") return false
+      if (activeLeadTab === "Scheduled" && !["Meeting", "Site Visit"].includes(l.status)) return false
+      if (activeLeadTab === "Overdue") {
+        if (!["Callback", "Meeting", "Site Visit"].includes(l.status)) return false
+        if (l.lastUpdated && new Date(l.lastUpdated) >= twoDaysAgo) return false
+      }
+      if (activeLeadTab === "EOI" && l.status !== "Expression of Interest") return false
+      if (activeLeadTab === "Booked" && l.status !== "Booked") return false
+
+      if (leadFilter === "My Leads" && l.assignedRM !== user?.name) return false
+      if (leadFilter === "Unassigned" && l.assignedRM) return false
+      if (leadFilter === "Duplicate" && !l.isDuplicate) return false
+      if (leadFilter === "Deleted" && !l.isDeleted) return false
+
+      if (search) {
+        const q = search.toLowerCase()
+        return (
+          l.clientName?.toLowerCase().includes(q) ||
+          l.phone?.includes(q) ||
+          l.email?.toLowerCase().includes(q) ||
+          l.source?.toLowerCase().includes(q)
+        )
+      }
+      return true
+    })
+  }, [leads, activeLeadTab, leadFilter, search, user])
+
+  const filteredData = useMemo(() => {
+    return dataRecords.filter(d => {
+      if (dataFilter === "Converted" && d.converted !== "Yes") return false
+      if (dataFilter === "Not Converted" && d.converted === "Yes") return false
+      if (dataSearch) {
+        const q = dataSearch.toLowerCase()
+        return d.name?.toLowerCase().includes(q) || d.phone?.includes(q) || d.email?.toLowerCase().includes(q)
+      }
+      return true
+    })
+  }, [dataRecords, dataFilter, dataSearch])
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  if (authState === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <p className="text-gray-500 text-sm">Loading CRM…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (authState === "login") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-indigo-900">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
+              <Building2 className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900">PropSarathi CRM</h1>
+            <p className="text-gray-500 text-sm mt-1">Sign in to your account</p>
+          </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Email</label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={e => setLoginEmail(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="you@propsarathi.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Password</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={e => setLoginPassword(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter password"
+                required
+              />
+            </div>
+            {loginError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm flex items-center gap-2">
+                <XCircle className="w-4 h-4 flex-shrink-0" />
+                {loginError}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={loginLoading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {loginLoading ? <><Loader2 className="w-4 h-4 animate-spin" />Signing in…</> : "Sign In"}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
+  // ── CRM App ──
+  return (
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
+      {/* Sidebar */}
+      <aside className={`${sidebarOpen ? "w-56" : "w-14"} bg-[#1a1f2e] text-white flex flex-col transition-all duration-200 flex-shrink-0`}>
+        {/* Logo */}
+        <div className={`flex items-center gap-3 p-4 border-b border-white/10 ${!sidebarOpen && "justify-center"}`}>
+          {sidebarOpen ? (
+            <>
+              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm leading-tight truncate">PropSarathi</p>
+                <p className="text-xs text-blue-400 font-medium">CRM</p>
+              </div>
+              <button onClick={() => setSidebarOpen(false)} className="text-white/40 hover:text-white">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setSidebarOpen(true)} className="text-white/60 hover:text-white">
+              <Building2 className="w-5 h-5" />
+            </button>
+          )}
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 py-4 space-y-1 px-2">
+          {[
+            { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+            { id: "leads", label: "Leads", icon: Users, count: leads.filter(l => !l.isDeleted).length },
+            { id: "data", label: "Data", icon: Database, count: dataRecords.length },
+            { id: "map", label: "Map", icon: MapPin },
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id as typeof view)}
+              className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${
+                view === item.id ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"
+              } ${!sidebarOpen && "justify-center"}`}
+            >
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              {sidebarOpen && (
+                <>
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {item.count !== undefined && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${view === item.id ? "bg-white/20" : "bg-white/10"}`}>
+                      {item.count}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* User */}
+        <div className={`p-3 border-t border-white/10 ${!sidebarOpen && "flex justify-center"}`}>
+          {sidebarOpen ? (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {user?.name?.charAt(0) || "U"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-white truncate">{user?.name}</p>
+                <p className="text-xs text-white/40 capitalize">{user?.role}</p>
+              </div>
+              <button onClick={handleLogout} title="Logout" className="text-white/40 hover:text-red-400">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button onClick={handleLogout} className="text-white/40 hover:text-red-400">
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </aside>
+
+      {/* Main */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Header */}
+        <header className="bg-white border-b border-gray-200 flex items-center gap-3 px-4 py-2.5 flex-shrink-0">
+          {!sidebarOpen && (
+            <button onClick={() => setSidebarOpen(true)} className="text-gray-500 hover:text-gray-700">
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+          <h1 className="font-semibold text-gray-900 text-base capitalize">{view}</h1>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search…"
+                value={view === "data" ? dataSearch : search}
+                onChange={e => view === "data" ? setDataSearch(e.target.value) : setSearch(e.target.value)}
+                className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+              />
+            </div>
+            <button
+              onClick={() => view === "data" ? setShowAddData(true) : openAddLead()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              {view === "data" ? "Add Data" : "Add Lead"}
+            </button>
+            <button onClick={loadAll} className="text-gray-400 hover:text-gray-600 p-1.5" title="Refresh">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden">
+          {view === "dashboard" && (
+            <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} />
+          )}
+          {view === "leads" && (
+            <LeadsView
+              leads={leads}
+              filteredLeads={filteredLeads}
+              selectedLead={selectedLead}
+              leadHistory={leadHistory}
+              detailTab={detailTab}
+              setDetailTab={setDetailTab}
+              leadFilter={leadFilter}
+              setLeadFilter={setLeadFilter}
+              activeLeadTab={activeLeadTab}
+              setActiveLeadTab={setActiveLeadTab}
+              showStatusAction={showStatusAction}
+              setShowStatusAction={setShowStatusAction}
+              selectedSubStatus={selectedSubStatus}
+              setSelectedSubStatus={setSelectedSubStatus}
+              statusNote={statusNote}
+              setStatusNote={setStatusNote}
+              statusSchedule={statusSchedule}
+              setStatusSchedule={setStatusSchedule}
+              bookingForm={bookingForm}
+              setBookingForm={setBookingForm}
+              savingStatus={savingStatus}
+              addNoteText={addNoteText}
+              setAddNoteText={setAddNoteText}
+              savingNote={savingNote}
+              onSelectLead={selectLead}
+              onEditLead={openEditLead}
+              onDeleteLead={deleteLead}
+              onSaveStatus={saveStatusAction}
+              onSaveNote={saveNote}
+              onAddLead={openAddLead}
+              user={user}
+            />
+          )}
+          {view === "data" && (
+            <DataView
+              dataRecords={filteredData}
+              selectedData={selectedData}
+              setSelectedData={setSelectedData}
+              dataFilter={dataFilter}
+              setDataFilter={setDataFilter}
+              showConvert={showConvert}
+              setShowConvert={setShowConvert}
+              convertForm={convertForm}
+              setConvertForm={setConvertForm}
+              onConvert={convertToLead}
+              savingData={savingData}
+            />
+          )}
+          {view === "map" && (
+            <div className="flex-1 h-full overflow-hidden" style={{ height: "100%" }}>
+              <MapEditor />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add/Edit Lead Modal */}
+      {showAddLead && (
+        <LeadModal
+          editingLead={editingLead}
+          leadForm={leadForm}
+          setLeadForm={setLeadForm}
+          addLeadTab={addLeadTab}
+          setAddLeadTab={setAddLeadTab}
+          savingLead={savingLead}
+          onSave={saveLead}
+          onClose={() => setShowAddLead(false)}
+        />
+      )}
+
+      {/* Add Data Modal */}
+      {showAddData && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="font-semibold text-gray-900">Add Data Record</h2>
+              <button onClick={() => setShowAddData(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Name" required>
+                  <Input value={newData.name} onChange={e => setNewData(p => ({ ...p, name: e.target.value }))} placeholder="Full name" />
+                </FormField>
+                <FormField label="Source">
+                  <Select value={newData.source} onChange={e => setNewData(p => ({ ...p, source: e.target.value }))}>
+                    {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </Select>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Phone" required>
+                  <Input value={newData.phone} onChange={e => setNewData(p => ({ ...p, phone: e.target.value }))} placeholder="Phone number" />
+                </FormField>
+                <FormField label="Email">
+                  <Input type="email" value={newData.email} onChange={e => setNewData(p => ({ ...p, email: e.target.value }))} placeholder="email@example.com" />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Gender">
+                  <Select value={newData.gender} onChange={e => setNewData(p => ({ ...p, gender: e.target.value }))}>
+                    <option value="">Select</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Other</option>
+                  </Select>
+                </FormField>
+                <FormField label="Date of Birth">
+                  <Input type="date" value={newData.dob} onChange={e => setNewData(p => ({ ...p, dob: e.target.value }))} />
+                </FormField>
+              </div>
+              <FormField label="Notes">
+                <Textarea value={newData.notes} onChange={e => setNewData(p => ({ ...p, notes: e.target.value }))} rows={2} placeholder="Any notes…" />
+              </FormField>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t">
+              <button onClick={() => setShowAddData(false)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
+              <button
+                onClick={saveData}
+                disabled={savingData || !newData.name || !newData.phone}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {savingData ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Dashboard View ────────────────────────────────────────────────────────────
+
+function DashboardView({ stats, loading, leads, onNavigate }: { stats: any; loading: boolean; leads: Lead[]; onNavigate: (v: any) => void }) {
+  if (loading || !stats) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+      </div>
+    )
+  }
+
+  const sourceCounts: { source: string; count: number }[] = stats.sourceCounts || []
+  const totalLeads = stats.totalLeads || 0
+
+  // Map sources to display groups
+  const socialSources = [
+    { name: "Facebook", key: "Facebook" },
+    { name: "LinkedIn", key: "LinkedIn" },
+    { name: "Google Ads", key: "Google Ads" },
+    { name: "Gmail", key: "Gmail" },
+    { name: "WhatsApp", key: "WhatsApp" },
+    { name: "YouTube", key: "YouTube" },
+  ]
+  const thirdPartySources = [
+    { name: "IVR", key: "IVR" },
+    { name: "Magic Bricks", key: "Magic Bricks" },
+    { name: "99 Acres", key: "99 Acres" },
+    { name: "Housing.com", key: "Housing.com" },
+    { name: "QuikrHomes", key: "QuikrHomes" },
+    { name: "JustLead", key: "JustLead" },
+    { name: "Website", key: "Website" },
+    { name: "Partner Portal", key: "__partner__" },
+  ]
+  const otherSources = [
+    { name: "Direct", key: "Direct" },
+    { name: "Referral", key: "Referral" },
+    { name: "Walk In", key: "Walk In" },
+    { name: "Cold Call", key: "Cold Call" },
+  ]
+
+  function getCount(key: string) {
+    if (key === "__partner__") {
+      return sourceCounts.filter(s => s.source?.startsWith("Partner:")).reduce((acc, s) => acc + s.count, 0)
+    }
+    return sourceCounts.find(s => s.source === key)?.count || 0
+  }
+
+  const pipelineTiles = [
+    { label: "New", value: stats.newLeads, color: "border-blue-500", bg: "bg-blue-50", text: "text-blue-700", icon: "🆕" },
+    { label: "Pending", value: stats.callbackLeads, color: "border-amber-500", bg: "bg-amber-50", text: "text-amber-700", icon: "⏰" },
+    { label: "Callbacks", value: stats.callbackLeads, color: "border-yellow-500", bg: "bg-yellow-50", text: "text-yellow-700", icon: "📞" },
+    { label: "Meetings", value: stats.meetings, color: "border-indigo-500", bg: "bg-indigo-50", text: "text-indigo-700", icon: "📅" },
+    { label: "Site Visits", value: stats.siteVisits, color: "border-purple-500", bg: "bg-purple-50", text: "text-purple-700", icon: "📍" },
+    { label: "Overdue", value: stats.overdue, color: "border-red-500", bg: "bg-red-50", text: "text-red-700", icon: "🔴" },
+    { label: "EOI", value: stats.eoi, color: "border-orange-500", bg: "bg-orange-50", text: "text-orange-700", icon: "⭐" },
+    { label: "Booked", value: stats.booked, color: "border-violet-500", bg: "bg-violet-50", text: "text-violet-700", icon: "🏆" },
+  ]
+
+  return (
+    <div className="h-full overflow-y-auto p-4 space-y-4">
+      {/* Top stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total Leads", value: stats.totalLeads, sub: `${stats.activeLeads} active`, icon: Users, color: "bg-blue-500" },
+          { label: "Unassigned", value: stats.unassigned, sub: "Needs assignment", icon: AlertCircle, color: "bg-amber-500" },
+          { label: "Booked", value: stats.booked, sub: "Closed deals", icon: CheckCircle2, color: "bg-green-500" },
+          { label: "Total Data", value: stats.totalData, sub: `${stats.convertedData} converted`, icon: Database, color: "bg-indigo-500" },
+        ].map(card => (
+          <div key={card.label} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className={`inline-flex p-2 rounded-lg ${card.color} mb-2`}>
+              <card.icon className="w-4 h-4 text-white" />
+            </div>
+            <p className="text-2xl font-bold text-gray-900">{card.value}</p>
+            <p className="text-xs text-gray-500">{card.label}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{card.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Pipeline tiles */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">Pipeline Overview</h2>
+        <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+          {pipelineTiles.map(tile => (
+            <div key={tile.label} className={`border-l-4 ${tile.color} ${tile.bg} rounded-r-lg p-2 text-center`}>
+              <p className="text-lg">{tile.icon}</p>
+              <p className={`text-xl font-bold ${tile.text}`}>{tile.value}</p>
+              <p className="text-xs text-gray-500 leading-tight">{tile.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Source breakdown + RM table */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Source breakdown */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Leads by Source</h2>
+          <div className="space-y-4">
+            {[
+              { group: "Social", sources: socialSources },
+              { group: "3rd Party", sources: thirdPartySources },
+              { group: "Others", sources: otherSources },
+            ].map(({ group, sources }) => (
+              <div key={group}>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{group}</p>
+                <div className="space-y-1.5">
+                  {sources.map(s => {
+                    const c = getCount(s.key)
+                    const pct = totalLeads > 0 ? Math.round((c / totalLeads) * 100) : 0
+                    return (
+                      <div key={s.name} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600 w-28 truncate flex-shrink-0">{s.name}</span>
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-500 w-6 text-right">{c}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Activity</h2>
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {(stats.recentActivity || []).length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">No recent activity</p>
+            ) : (
+              (stats.recentActivity || []).map((h: HistoryEntry, i: number) => (
+                <div key={i} className="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-700 font-medium truncate">{h.action}</p>
+                    <p className="text-xs text-gray-400">{h.changedBy} · {h.timestamp}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* RM Report Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">Team Performance</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-100">
+                {["Agent", "Total", "New", "Pending", "Overdue", "EOI", "Callbacks", "Meetings", "Site Visits", "Booked"].map(h => (
+                  <th key={h} className="text-left pb-2 pr-3 font-semibold text-gray-500 whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(stats.byRM || []).map((rm: any) => (
+                <tr key={rm.name} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="py-2 pr-3 font-medium text-gray-800 whitespace-nowrap">{rm.name}</td>
+                  <td className="py-2 pr-3 font-bold text-blue-600">{rm.total}</td>
+                  <td className="py-2 pr-3">{rm.new}</td>
+                  <td className="py-2 pr-3 text-amber-600">{rm.pending}</td>
+                  <td className="py-2 pr-3 text-red-600">{rm.overdue}</td>
+                  <td className="py-2 pr-3 text-orange-600">{rm.eoi}</td>
+                  <td className="py-2 pr-3">{rm.callbacks}</td>
+                  <td className="py-2 pr-3">{rm.meetings}</td>
+                  <td className="py-2 pr-3">{rm.siteVisits}</td>
+                  <td className="py-2 pr-3 text-green-600 font-medium">{rm.booked}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Leads View ────────────────────────────────────────────────────────────────
+
+function LeadsView({
+  leads, filteredLeads, selectedLead, leadHistory, detailTab, setDetailTab,
+  leadFilter, setLeadFilter, activeLeadTab, setActiveLeadTab,
+  showStatusAction, setShowStatusAction, selectedSubStatus, setSelectedSubStatus,
+  statusNote, setStatusNote, statusSchedule, setStatusSchedule,
+  bookingForm, setBookingForm, savingStatus,
+  addNoteText, setAddNoteText, savingNote,
+  onSelectLead, onEditLead, onDeleteLead, onSaveStatus, onSaveNote, onAddLead, user,
+}: any) {
+
+  const statusActions = [
+    { label: "Callback", color: "bg-amber-500 hover:bg-amber-600" },
+    { label: "Meeting", color: "bg-indigo-500 hover:bg-indigo-600" },
+    { label: "Site Visit", color: "bg-purple-500 hover:bg-purple-600" },
+    { label: "Expression of Interest", color: "bg-orange-500 hover:bg-orange-600" },
+    { label: "Booked", color: "bg-violet-600 hover:bg-violet-700" },
+    { label: "Not Interested", color: "bg-gray-500 hover:bg-gray-600" },
+    { label: "Dropped", color: "bg-red-500 hover:bg-red-600" },
+  ]
+
+  function getSubOptions(action: string): string[] {
+    switch (action) {
+      case "Callback": return CALLBACK_SUBS
+      case "Meeting": return MEETING_SUBS
+      case "Site Visit": return SITE_VISIT_SUBS
+      case "Not Interested": return NOT_INTERESTED_SUBS
+      case "Dropped": return DROP_SUBS
+      case "Expression of Interest": return EOI_SUBS
+      default: return []
+    }
+  }
+
+  const tabs = [
+    { id: "All", label: "All" },
+    { id: "New", label: "New" },
+    { id: "Pending", label: "Pending" },
+    { id: "Scheduled", label: "Scheduled" },
+    { id: "Overdue", label: "Overdue" },
+    { id: "EOI", label: "EOI" },
+    { id: "Booked", label: "Booked" },
+  ]
+
+  const filters = ["All", "My Leads", "Team's", "Unassigned", "Duplicate", "Deleted"]
+
+  return (
+    <div className="flex h-full overflow-hidden">
+      {/* Left: Lead list */}
+      <div className={`${selectedLead ? "w-96 flex-shrink-0" : "flex-1"} flex flex-col border-r border-gray-200 bg-white overflow-hidden`}>
+        {/* Filter tabs */}
+        <div className="border-b border-gray-100 px-3 pt-2">
+          <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-hide">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveLeadTab(tab.id)}
+                className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0 font-medium transition-colors ${
+                  activeLeadTab === tab.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {/* Secondary filter */}
+          <div className="flex gap-1 pb-2 overflow-x-auto scrollbar-hide">
+            {filters.map(f => (
+              <button
+                key={f}
+                onClick={() => setLeadFilter(f)}
+                className={`text-xs px-2.5 py-1 rounded whitespace-nowrap flex-shrink-0 transition-colors ${
+                  leadFilter === f ? "bg-gray-800 text-white" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Count */}
+        <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-50 flex items-center justify-between">
+          <span>{filteredLeads.length} leads</span>
+        </div>
+
+        {/* Lead table */}
+        <div className="flex-1 overflow-y-auto">
+          {filteredLeads.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+              <Users className="w-8 h-8 mb-2 opacity-30" />
+              <p className="text-sm">No leads found</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <tbody>
+                {filteredLeads.map((lead: Lead) => {
+                  const tags = lead.tags ? lead.tags.split(",").map(t => t.trim()).filter(Boolean) : []
+                  const isSelected = selectedLead?.leadId === lead.leadId
+                  const sourceDisplay = lead.source?.startsWith("Partner:") ? "Partner Portal" : lead.source
+                  return (
+                    <tr
+                      key={lead.leadId}
+                      onClick={() => onSelectLead(lead)}
+                      className={`border-b border-gray-100 cursor-pointer transition-colors ${
+                        isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <td className="pl-3 pr-1 py-2 w-1">
+                        <div className={`w-2 h-2 rounded-full ${STATUS_DOT[lead.status] || "bg-gray-400"}`} />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span className="font-semibold text-gray-800">{lead.clientName || "—"}</span>
+                          {tags.slice(0, 2).map(tag => <TagBadge key={tag} tag={tag} />)}
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-500">
+                          <Phone className="w-3 h-3" />
+                          <span>{lead.countryCode} {lead.phone}</span>
+                          {lead.altPhone && <span className="text-gray-400">· {lead.altPhone}</span>}
+                        </div>
+                        {lead.lastNote && (
+                          <p className="text-gray-400 truncate max-w-[160px]">{lead.lastNote}</p>
+                        )}
+                      </td>
+                      <td className="py-2 pr-2 hidden sm:table-cell">
+                        <div className="flex items-center gap-1 mb-1">
+                          <RMInitial name={lead.assignedRM} color="bg-blue-500" />
+                          {lead.secondaryOwner && <RMInitial name={lead.secondaryOwner} color="bg-gray-400" />}
+                        </div>
+                        <p className="text-gray-400">{sourceDisplay}</p>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <div className="mb-1">
+                          <StatusBadge status={lead.status} />
+                        </div>
+                        {lead.subStatus && <p className="text-gray-400">{lead.subStatus}</p>}
+                        <button
+                          onClick={e => { e.stopPropagation(); onEditLead(lead) }}
+                          className="mt-1 text-gray-300 hover:text-blue-500"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Right: Lead detail panel */}
+      {selectedLead && (
+        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+          {/* Panel header */}
+          <div className="border-b border-gray-200 p-3 flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => onSelectLead(null)}
+              className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <button onClick={() => onEditLead(selectedLead)} className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium flex items-center gap-1">
+              <Edit2 className="w-3 h-3" /> Edit
+            </button>
+            <button onClick={() => onDeleteLead(selectedLead)} className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-medium flex items-center gap-1">
+              <Trash2 className="w-3 h-3" /> Delete
+            </button>
+            <button
+              onClick={() => window.open(`tel:${selectedLead.countryCode}${selectedLead.phone}`)}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center gap-1"
+            >
+              <Phone className="w-3 h-3" /> Call
+            </button>
+            <button
+              onClick={() => window.open(`https://wa.me/${selectedLead.countryCode.replace("+", "")}${selectedLead.phone}`)}
+              className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium flex items-center gap-1"
+            >
+              <MessageCircle className="w-3 h-3" /> WhatsApp
+            </button>
+            {selectedLead.email && (
+              <button
+                onClick={() => window.open(`mailto:${selectedLead.email}`)}
+                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-medium flex items-center gap-1"
+              >
+                <Mail className="w-3 h-3" /> Email
+              </button>
+            )}
+            <div className="flex-1" />
+            <StatusBadge status={selectedLead.status} />
+          </div>
+
+          {/* Tab bar */}
+          <div className="border-b border-gray-100 flex overflow-x-auto">
+            {[
+              { id: "overview", label: "Overview" },
+              { id: "status", label: "Status" },
+              { id: "notes", label: "Notes" },
+              { id: "history", label: "History" },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setDetailTab(tab.id)}
+                className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+                  detailTab === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {detailTab === "overview" && <LeadOverviewTab lead={selectedLead} />}
+            {detailTab === "status" && (
+              <LeadStatusTab
+                lead={selectedLead}
+                statusActions={statusActions}
+                showStatusAction={showStatusAction}
+                setShowStatusAction={setShowStatusAction}
+                selectedSubStatus={selectedSubStatus}
+                setSelectedSubStatus={setSelectedSubStatus}
+                statusNote={statusNote}
+                setStatusNote={setStatusNote}
+                statusSchedule={statusSchedule}
+                setStatusSchedule={setStatusSchedule}
+                bookingForm={bookingForm}
+                setBookingForm={setBookingForm}
+                savingStatus={savingStatus}
+                onSave={onSaveStatus}
+                getSubOptions={getSubOptions}
+              />
+            )}
+            {detailTab === "notes" && (
+              <LeadNotesTab
+                lead={selectedLead}
+                history={leadHistory}
+                addNoteText={addNoteText}
+                setAddNoteText={setAddNoteText}
+                savingNote={savingNote}
+                onSave={onSaveNote}
+              />
+            )}
+            {detailTab === "history" && (
+              <LeadHistoryTab history={leadHistory} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {!selectedLead && (
+        <div className="flex-1 flex items-center justify-center text-gray-300">
+          <div className="text-center">
+            <Users className="w-12 h-12 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Select a lead to view details</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Lead Overview Tab ─────────────────────────────────────────────────────────
+
+function LeadOverviewTab({ lead }: { lead: Lead }) {
+  const InfoRow = ({ label, value }: { label: string; value: string }) => {
+    if (!value) return null
+    return (
+      <div className="flex">
+        <span className="text-xs text-gray-500 w-36 flex-shrink-0">{label}</span>
+        <span className="text-xs text-gray-800 font-medium">{value}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Lead info header */}
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-sm flex-shrink-0">
+          {lead.clientName?.charAt(0) || "?"}
+        </div>
+        <div>
+          <h2 className="font-bold text-gray-900 text-base">{lead.clientName}</h2>
+          <p className="text-xs text-gray-500">{lead.leadId} · {lead.createdAt}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <StatusBadge status={lead.status} />
+            {lead.subStatus && <span className="text-xs text-gray-500">· {lead.subStatus}</span>}
+            {lead.isDuplicate && <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">Duplicate</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Contact */}
+      <section>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Contact</h3>
+        <div className="space-y-1.5">
+          <InfoRow label="Phone" value={`${lead.countryCode} ${lead.phone}`} />
+          <InfoRow label="Alt Phone" value={lead.altPhone} />
+          <InfoRow label="Landline" value={lead.landline} />
+          <InfoRow label="Email" value={lead.email} />
+          <InfoRow label="City" value={lead.city} />
+          <InfoRow label="Gender" value={lead.gender} />
+          <InfoRow label="DOB" value={lead.dob} />
+          <InfoRow label="Marital Status" value={lead.maritalStatus} />
+        </div>
+      </section>
+
+      {/* Professional */}
+      {(lead.profession || lead.company || lead.designation) && (
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Professional</h3>
+          <div className="space-y-1.5">
+            <InfoRow label="Profession" value={lead.profession} />
+            <InfoRow label="Company" value={lead.company} />
+            <InfoRow label="Designation" value={lead.designation} />
+          </div>
+        </section>
+      )}
+
+      {/* Property Requirement */}
+      <section>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Requirement</h3>
+        <div className="space-y-1.5">
+          <InfoRow label="Property Type" value={lead.propertyType} />
+          <InfoRow label="Budget" value={lead.budget} />
+          <InfoRow label="Min Budget" value={lead.minBudget} />
+          <InfoRow label="Max Budget" value={lead.maxBudget} />
+          <InfoRow label="Location" value={lead.enquiredLocation} />
+          <InfoRow label="Enquired For" value={lead.enquiredFor} />
+          <InfoRow label="Purpose" value={lead.purpose} />
+          <InfoRow label="Possession Date" value={lead.possessionDate} />
+          <InfoRow label="Carpet Area" value={lead.carpetArea} />
+          <InfoRow label="Saleable Area" value={lead.saleableArea} />
+        </div>
+      </section>
+
+      {/* Assignment */}
+      <section>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Assignment</h3>
+        <div className="space-y-1.5">
+          <InfoRow label="Assigned RM" value={lead.assignedRM} />
+          <InfoRow label="Secondary Owner" value={lead.secondaryOwner} />
+          <InfoRow label="Sourcing Manager" value={lead.sourcingManager} />
+          <InfoRow label="Closing Manager" value={lead.closingManager} />
+          <InfoRow label="Channel Partner" value={lead.channelPartner} />
+        </div>
+      </section>
+
+      {/* Source */}
+      <section>
+        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Source</h3>
+        <div className="space-y-1.5">
+          <InfoRow label="Source" value={lead.source?.startsWith("Partner:") ? "Partner Portal" : lead.source} />
+          <InfoRow label="Sub Source" value={lead.subSource} />
+          {lead.source?.startsWith("Partner:") && <InfoRow label="Partner" value={lead.partnerName} />}
+          <InfoRow label="Referral Name" value={lead.referralName} />
+          <InfoRow label="Referral Phone" value={lead.referralPhone} />
+        </div>
+      </section>
+
+      {/* Booking (if booked) */}
+      {lead.status === "Booked" && (lead.bookedName || lead.bookedDate || lead.agreementValue) && (
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Booking Details</h3>
+          <div className="space-y-1.5">
+            <InfoRow label="Booked Name" value={lead.bookedName} />
+            <InfoRow label="Booked Date" value={lead.bookedDate} />
+            <InfoRow label="Agreement Value" value={lead.agreementValue} />
+            <InfoRow label="Project" value={lead.projectEnquired} />
+          </div>
+        </section>
+      )}
+
+      {/* Last note */}
+      {lead.lastNote && (
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Last Note</h3>
+          <p className="text-xs text-gray-700 bg-yellow-50 border border-yellow-100 rounded-lg p-3">{lead.lastNote}</p>
+        </section>
+      )}
+    </div>
+  )
+}
+
+// ─── Lead Status Tab ───────────────────────────────────────────────────────────
+
+function LeadStatusTab({ lead, statusActions, showStatusAction, setShowStatusAction, selectedSubStatus, setSelectedSubStatus, statusNote, setStatusNote, statusSchedule, setStatusSchedule, bookingForm, setBookingForm, savingStatus, onSave, getSubOptions }: any) {
+  const subOptions: string[] = showStatusAction ? getSubOptions(showStatusAction.action) : []
+  const needsSchedule = showStatusAction && ["Callback", "Meeting", "Site Visit"].includes(showStatusAction.action)
+  const isBooking = showStatusAction?.action === "Booked"
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Current Status</h3>
+        <div className="flex items-center gap-2">
+          <StatusBadge status={lead.status} />
+          {lead.subStatus && <span className="text-xs text-gray-500">{lead.subStatus}</span>}
+        </div>
+        {lead.scheduledAt && (
+          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+            <Calendar className="w-3 h-3" /> Scheduled: {lead.scheduledAt}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Update Status</h3>
+        <div className="flex flex-wrap gap-2">
+          {statusActions.map((action: any) => (
+            <button
+              key={action.label}
+              onClick={() => {
+                setShowStatusAction(showStatusAction?.action === action.label ? null : { action: action.label })
+                setSelectedSubStatus("")
+                setStatusNote("")
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors ${action.color} ${
+                showStatusAction?.action === action.label ? "ring-2 ring-offset-1 ring-gray-400" : ""
+              }`}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {showStatusAction && (
+        <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
+          <p className="text-xs font-semibold text-gray-700">Setting status to: <span className="text-blue-600">{showStatusAction.action}</span></p>
+
+          {subOptions.length > 0 && (
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Sub Status</label>
+              <select
+                value={selectedSubStatus}
+                onChange={e => setSelectedSubStatus(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select sub-status…</option>
+                {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          )}
+
+          {needsSchedule && (
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Schedule Date/Time</label>
+              <input
+                type="datetime-local"
+                value={statusSchedule}
+                onChange={e => setStatusSchedule(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          {isBooking && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">Booked In Name Of</label>
+                  <input
+                    type="text"
+                    value={bookingForm.bookedName}
+                    onChange={e => setBookingForm((p: any) => ({ ...p, bookedName: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Name"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">Booking Date</label>
+                  <input
+                    type="date"
+                    value={bookingForm.bookedDate}
+                    onChange={e => setBookingForm((p: any) => ({ ...p, bookedDate: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">Agreement Value</label>
+                  <input
+                    type="text"
+                    value={bookingForm.agreementValue}
+                    onChange={e => setBookingForm((p: any) => ({ ...p, agreementValue: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g. 1.2 Cr"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">Property / Project</label>
+                  <input
+                    type="text"
+                    value={bookingForm.property}
+                    onChange={e => setBookingForm((p: any) => ({ ...p, property: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Project name"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Note</label>
+            <textarea
+              value={statusNote}
+              onChange={e => setStatusNote(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows={2}
+              placeholder="Add a note about this update…"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => onSave(false)}
+              disabled={savingStatus}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {savingStatus ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save
+            </button>
+            <button
+              onClick={() => onSave(true)}
+              disabled={savingStatus}
+              className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
+            >
+              Save & Next
+            </button>
+            <button
+              onClick={() => setShowStatusAction(null)}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Lead Notes Tab ────────────────────────────────────────────────────────────
+
+function LeadNotesTab({ lead, history, addNoteText, setAddNoteText, savingNote, onSave }: any) {
+  return (
+    <div className="space-y-4">
+      {/* Add note */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Add Note</h3>
+        <textarea
+          value={addNoteText}
+          onChange={e => setAddNoteText(e.target.value)}
+          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          rows={3}
+          placeholder="Type a note…"
+        />
+        <button
+          onClick={onSave}
+          disabled={savingNote || !addNoteText.trim()}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
+        >
+          {savingNote ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+          Save Note
+        </button>
+      </div>
+
+      {/* Current last note */}
+      {lead.lastNote && (
+        <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+          <p className="text-xs font-semibold text-yellow-700 mb-1">Last Note</p>
+          <p className="text-xs text-gray-700">{lead.lastNote}</p>
+        </div>
+      )}
+
+      {/* All notes from history */}
+      <div>
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Note History</h3>
+        <div className="space-y-2">
+          {history.filter((h: HistoryEntry) => h.notes).length === 0 ? (
+            <p className="text-xs text-gray-400">No notes yet</p>
+          ) : (
+            history.filter((h: HistoryEntry) => h.notes).map((h: HistoryEntry, i: number) => (
+              <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                <p className="text-xs text-gray-700">{h.notes}</p>
+                <p className="text-xs text-gray-400 mt-1">{h.changedBy} · {h.timestamp}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Lead History Tab ──────────────────────────────────────────────────────────
+
+function LeadHistoryTab({ history }: { history: HistoryEntry[] }) {
+  return (
+    <div className="space-y-2">
+      {history.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-8">No history yet</p>
+      ) : (
+        history.map((h, i) => (
+          <div key={i} className="flex gap-3 py-2 border-b border-gray-50 last:border-0">
+            <div className="flex flex-col items-center">
+              <div className="w-2 h-2 rounded-full bg-blue-400 mt-1 flex-shrink-0" />
+              {i < history.length - 1 && <div className="w-0.5 flex-1 bg-gray-200 mt-1" />}
+            </div>
+            <div className="flex-1 pb-2">
+              <p className="text-xs font-medium text-gray-800">{h.action}</p>
+              {h.oldStatus && h.newStatus && (
+                <p className="text-xs text-gray-500">
+                  <span className="text-gray-400">{h.oldStatus}</span>
+                  {" → "}
+                  <span className="font-medium">{h.newStatus}</span>
+                </p>
+              )}
+              {h.notes && <p className="text-xs text-gray-500 italic mt-0.5">"{h.notes}"</p>}
+              <p className="text-xs text-gray-400 mt-0.5">{h.changedBy} · {h.timestamp}</p>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
+// ─── Data View ─────────────────────────────────────────────────────────────────
+
+function DataView({ dataRecords, selectedData, setSelectedData, dataFilter, setDataFilter, showConvert, setShowConvert, convertForm, setConvertForm, onConvert, savingData }: any) {
+  const filters = ["All", "Converted", "Not Converted"]
+
+  return (
+    <div className="flex h-full overflow-hidden">
+      <div className={`${selectedData ? "w-96 flex-shrink-0" : "flex-1"} flex flex-col border-r border-gray-200 bg-white overflow-hidden`}>
+        {/* Filter */}
+        <div className="border-b border-gray-100 px-3 py-2 flex gap-1">
+          {filters.map(f => (
+            <button
+              key={f}
+              onClick={() => setDataFilter(f)}
+              className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+                dataFilter === f ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-50">
+          {dataRecords.length} records
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {dataRecords.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+              <Database className="w-8 h-8 mb-2 opacity-30" />
+              <p className="text-sm">No data records</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <tbody>
+                {dataRecords.map((rec: DataRecord) => (
+                  <tr
+                    key={rec.dataId}
+                    onClick={() => setSelectedData(rec)}
+                    className={`border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${selectedData?.dataId === rec.dataId ? "bg-blue-50" : ""}`}
+                  >
+                    <td className="pl-3 pr-1 py-2 w-1">
+                      <div className={`w-2 h-2 rounded-full ${rec.converted === "Yes" ? "bg-green-500" : "bg-gray-300"}`} />
+                    </td>
+                    <td className="py-2 pr-2">
+                      <p className="font-semibold text-gray-800">{rec.name || "—"}</p>
+                      <div className="flex items-center gap-1 text-gray-500">
+                        <Phone className="w-3 h-3" />
+                        <span>{rec.countryCode} {rec.phone}</span>
+                      </div>
+                      {rec.email && <p className="text-gray-400 truncate max-w-[150px]">{rec.email}</p>}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <p className="text-gray-500">{rec.source}</p>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${rec.converted === "Yes" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                        {rec.converted === "Yes" ? "Converted" : "Not Converted"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Data detail */}
+      {selectedData ? (
+        <div className="flex-1 flex flex-col overflow-hidden bg-white">
+          <div className="border-b border-gray-200 p-3 flex items-center gap-2">
+            <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm">
+              {selectedData.name?.charAt(0) || "?"}
+            </div>
+            <div className="flex-1">
+              <h2 className="font-bold text-gray-900 text-sm">{selectedData.name}</h2>
+              <p className="text-xs text-gray-500">{selectedData.dataId} · {selectedData.createdAt}</p>
+            </div>
+            {selectedData.converted !== "Yes" && (
+              <button
+                onClick={() => setShowConvert(true)}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium"
+              >
+                Convert to Lead
+              </button>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {[
+              { label: "Phone", value: `${selectedData.countryCode} ${selectedData.phone}` },
+              { label: "Email", value: selectedData.email },
+              { label: "Source", value: selectedData.source },
+              { label: "Gender", value: selectedData.gender },
+              { label: "DOB", value: selectedData.dob },
+              { label: "Status", value: selectedData.status },
+              { label: "Converted", value: selectedData.converted },
+              { label: "Converted Lead ID", value: selectedData.convertedLeadId },
+            ].filter(r => r.value).map(row => (
+              <div key={row.label} className="flex">
+                <span className="text-xs text-gray-500 w-36">{row.label}</span>
+                <span className="text-xs font-medium text-gray-800">{row.value}</span>
+              </div>
+            ))}
+            {selectedData.notes && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">Notes</p>
+                <p className="text-xs text-gray-700 bg-gray-50 rounded-lg p-3">{selectedData.notes}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Convert modal inline */}
+          {showConvert && (
+            <div className="border-t border-gray-200 p-4 bg-gray-50 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-800">Convert to Lead</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">Assigned RM</label>
+                  <select
+                    value={convertForm.assignedRM}
+                    onChange={e => setConvertForm((p: any) => ({ ...p, assignedRM: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none"
+                  >
+                    <option value="">Select RM</option>
+                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">Budget</label>
+                  <input
+                    value={convertForm.budget}
+                    onChange={e => setConvertForm((p: any) => ({ ...p, budget: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none"
+                    placeholder="e.g. 50 Lakhs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">Property Type</label>
+                  <select
+                    value={convertForm.propertyType}
+                    onChange={e => setConvertForm((p: any) => ({ ...p, propertyType: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none"
+                  >
+                    <option value="">Select type</option>
+                    {["Apartment", "Villa", "Penthouse", "Studio", "Townhouse", "Plot"].map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600 mb-1 block">City</label>
+                  <select
+                    value={convertForm.city}
+                    onChange={e => setConvertForm((p: any) => ({ ...p, city: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none"
+                  >
+                    <option value="">Select city</option>
+                    {["Bangalore", "Dubai", "Mumbai", "Delhi"].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={onConvert}
+                  disabled={savingData}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {savingData ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  Convert
+                </button>
+                <button onClick={() => setShowConvert(false)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200">Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-gray-300">
+          <div className="text-center">
+            <Database className="w-10 h-10 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Select a record to view details</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Lead Modal (Add / Edit) ───────────────────────────────────────────────────
+
+function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setAddLeadTab, savingLead, onSave, onClose }: any) {
+  function upd(field: string, value: string) {
+    setLeadForm((p: any) => ({ ...p, [field]: value }))
+  }
+
+  const tabs = [
+    { id: "leadinfo", label: "Lead Info" },
+    { id: "enquiry", label: "Enquiry" },
+    { id: "additional", label: "Additional" },
+    { id: "others", label: "Others" },
+    { id: "notes", label: "Notes" },
+  ]
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="font-semibold text-gray-900 text-base">
+            {editingLead ? "Edit Lead" : "Add New Lead"}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b overflow-x-auto flex-shrink-0">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setAddLeadTab(tab.id)}
+              className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
+                addLeadTab === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto p-5">
+          {addLeadTab === "leadinfo" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Client Name" required>
+                  <Input value={leadForm.clientName || ""} onChange={e => upd("clientName", e.target.value)} placeholder="Full name" />
+                </FormField>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Phone<span className="text-red-500 ml-0.5">*</span></label>
+                  <div className="flex gap-1.5">
+                    <select
+                      value={leadForm.countryCode || "+91"}
+                      onChange={e => upd("countryCode", e.target.value)}
+                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white focus:outline-none w-20"
+                    >
+                      {["+91", "+971", "+1", "+44", "+65", "+61"].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <Input value={leadForm.phone || ""} onChange={e => upd("phone", e.target.value)} placeholder="Phone" className="flex-1" />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Alt Phone">
+                  <Input value={leadForm.altPhone || ""} onChange={e => upd("altPhone", e.target.value)} placeholder="Alternate phone" />
+                </FormField>
+                <FormField label="Landline">
+                  <Input value={leadForm.landline || ""} onChange={e => upd("landline", e.target.value)} placeholder="Landline" />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Email">
+                  <Input type="email" value={leadForm.email || ""} onChange={e => upd("email", e.target.value)} placeholder="email@example.com" />
+                </FormField>
+                <FormField label="City">
+                  <Select value={leadForm.city || ""} onChange={e => upd("city", e.target.value)}>
+                    <option value="">Select city</option>
+                    {["Bangalore", "Dubai", "Mumbai", "Delhi", "Hyderabad", "Chennai", "Pune", "Gurgaon", "Noida"].map(c => <option key={c} value={c}>{c}</option>)}
+                  </Select>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Gender">
+                  <Select value={leadForm.gender || ""} onChange={e => upd("gender", e.target.value)}>
+                    <option value="">Select</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Other</option>
+                  </Select>
+                </FormField>
+                <FormField label="Date of Birth">
+                  <Input type="date" value={leadForm.dob || ""} onChange={e => upd("dob", e.target.value)} />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Marital Status">
+                  <Select value={leadForm.maritalStatus || ""} onChange={e => upd("maritalStatus", e.target.value)}>
+                    <option value="">Select</option>
+                    <option>Single</option>
+                    <option>Married</option>
+                    <option>Divorced</option>
+                    <option>Widowed</option>
+                  </Select>
+                </FormField>
+                <FormField label="Status">
+                  <Select value={leadForm.status || "New"} onChange={e => upd("status", e.target.value)}>
+                    {["New", "Callback", "Meeting", "Site Visit", "Expression of Interest", "Booked", "Not Interested", "Dropped"].map(s => <option key={s} value={s}>{s}</option>)}
+                  </Select>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Assigned RM">
+                  <Select value={leadForm.assignedRM || ""} onChange={e => upd("assignedRM", e.target.value)}>
+                    <option value="">Not Assigned</option>
+                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                  </Select>
+                </FormField>
+                <FormField label="Secondary Owner">
+                  <Select value={leadForm.secondaryOwner || ""} onChange={e => upd("secondaryOwner", e.target.value)}>
+                    <option value="">None</option>
+                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                  </Select>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Source">
+                  <Select value={leadForm.source || "Direct"} onChange={e => upd("source", e.target.value)}>
+                    {SOURCE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </Select>
+                </FormField>
+                <FormField label="Sub Source">
+                  <Input value={leadForm.subSource || ""} onChange={e => upd("subSource", e.target.value)} placeholder="Sub source" />
+                </FormField>
+              </div>
+              <FormField label="Tags">
+                <Input value={leadForm.tags || ""} onChange={e => upd("tags", e.target.value)} placeholder="Hot, Warm, Cold (comma separated)" />
+              </FormField>
+            </div>
+          )}
+
+          {addLeadTab === "enquiry" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Property Type">
+                  <Select value={leadForm.propertyType || ""} onChange={e => upd("propertyType", e.target.value)}>
+                    <option value="">Select</option>
+                    {["Apartment", "Villa", "Penthouse", "Studio", "Townhouse", "Plot", "Commercial"].map(t => <option key={t} value={t}>{t}</option>)}
+                  </Select>
+                </FormField>
+                <FormField label="Budget">
+                  <Input value={leadForm.budget || ""} onChange={e => upd("budget", e.target.value)} placeholder="e.g. 1 Cr, AED 500K" />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Min Budget">
+                  <Input value={leadForm.minBudget || ""} onChange={e => upd("minBudget", e.target.value)} placeholder="Min budget" />
+                </FormField>
+                <FormField label="Max Budget">
+                  <Input value={leadForm.maxBudget || ""} onChange={e => upd("maxBudget", e.target.value)} placeholder="Max budget" />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Enquired Location">
+                  <Input value={leadForm.enquiredLocation || ""} onChange={e => upd("enquiredLocation", e.target.value)} placeholder="Location" />
+                </FormField>
+                <FormField label="Enquired For">
+                  <Input value={leadForm.enquiredFor || ""} onChange={e => upd("enquiredFor", e.target.value)} placeholder="What property" />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Purpose">
+                  <Select value={leadForm.purpose || ""} onChange={e => upd("purpose", e.target.value)}>
+                    <option value="">Select</option>
+                    <option>Investment</option>
+                    <option>Own Use</option>
+                    <option>Rental Income</option>
+                    <option>Capital Appreciation</option>
+                  </Select>
+                </FormField>
+                <FormField label="Buyer">
+                  <Select value={leadForm.buyer || ""} onChange={e => upd("buyer", e.target.value)}>
+                    <option value="">Select</option>
+                    <option>First Time Buyer</option>
+                    <option>Repeat Buyer</option>
+                    <option>Investor</option>
+                    <option>NRI</option>
+                  </Select>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Possession Date">
+                  <Input type="date" value={leadForm.possessionDate || ""} onChange={e => upd("possessionDate", e.target.value)} />
+                </FormField>
+                <FormField label="Payment Plan">
+                  <Select value={leadForm.paymentPlan || ""} onChange={e => upd("paymentPlan", e.target.value)}>
+                    <option value="">Select</option>
+                    <option>Full Payment</option>
+                    <option>Loan</option>
+                    <option>Construction Linked</option>
+                    <option>Post Possession</option>
+                  </Select>
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Carpet Area (sq ft)">
+                  <Input value={leadForm.carpetArea || ""} onChange={e => upd("carpetArea", e.target.value)} placeholder="e.g. 1200" />
+                </FormField>
+                <FormField label="Saleable Area (sq ft)">
+                  <Input value={leadForm.saleableArea || ""} onChange={e => upd("saleableArea", e.target.value)} placeholder="e.g. 1500" />
+                </FormField>
+              </div>
+              <FormField label="Project Enquired">
+                <Input value={leadForm.projectEnquired || ""} onChange={e => upd("projectEnquired", e.target.value)} placeholder="Project / property name" />
+              </FormField>
+            </div>
+          )}
+
+          {addLeadTab === "additional" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Profession">
+                  <Input value={leadForm.profession || ""} onChange={e => upd("profession", e.target.value)} placeholder="e.g. Doctor, Engineer" />
+                </FormField>
+                <FormField label="Company">
+                  <Input value={leadForm.company || ""} onChange={e => upd("company", e.target.value)} placeholder="Company name" />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Designation">
+                  <Input value={leadForm.designation || ""} onChange={e => upd("designation", e.target.value)} placeholder="Job title" />
+                </FormField>
+                <FormField label="Channel Partner">
+                  <Input value={leadForm.channelPartner || ""} onChange={e => upd("channelPartner", e.target.value)} placeholder="Channel partner name" />
+                </FormField>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Sourcing Manager">
+                  <Select value={leadForm.sourcingManager || ""} onChange={e => upd("sourcingManager", e.target.value)}>
+                    <option value="">None</option>
+                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                  </Select>
+                </FormField>
+                <FormField label="Closing Manager">
+                  <Select value={leadForm.closingManager || ""} onChange={e => upd("closingManager", e.target.value)}>
+                    <option value="">None</option>
+                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                  </Select>
+                </FormField>
+              </div>
+            </div>
+          )}
+
+          {addLeadTab === "others" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField label="Referral Name">
+                  <Input value={leadForm.referralName || ""} onChange={e => upd("referralName", e.target.value)} placeholder="Referral person name" />
+                </FormField>
+                <FormField label="Referral Phone">
+                  <Input value={leadForm.referralPhone || ""} onChange={e => upd("referralPhone", e.target.value)} placeholder="Referral phone" />
+                </FormField>
+              </div>
+              <FormField label="Referral Email">
+                <Input type="email" value={leadForm.referralEmail || ""} onChange={e => upd("referralEmail", e.target.value)} placeholder="Referral email" />
+              </FormField>
+              {leadForm.source === "Partner Portal" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField label="Partner Name">
+                      <Input value={leadForm.partnerName || ""} onChange={e => upd("partnerName", e.target.value)} placeholder="Partner name" />
+                    </FormField>
+                    <FormField label="Partner ID">
+                      <Input value={leadForm.partnerId || ""} onChange={e => upd("partnerId", e.target.value)} placeholder="Partner ID" />
+                    </FormField>
+                  </div>
+                </>
+              )}
+              <FormField label="Mark as Duplicate">
+                <select
+                  value={leadForm.isDuplicate ? "Yes" : "No"}
+                  onChange={e => setLeadForm((p: any) => ({ ...p, isDuplicate: e.target.value === "Yes" }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white"
+                >
+                  <option value="No">No</option>
+                  <option value="Yes">Yes - Mark as Duplicate</option>
+                </select>
+              </FormField>
+            </div>
+          )}
+
+          {addLeadTab === "notes" && (
+            <div className="space-y-4">
+              <FormField label="Notes">
+                <Textarea
+                  value={leadForm.notes || ""}
+                  onChange={e => upd("notes", e.target.value)}
+                  rows={6}
+                  placeholder="Add any notes about this lead…"
+                />
+              </FormField>
+              <FormField label="Scheduled At">
+                <Input
+                  type="datetime-local"
+                  value={leadForm.scheduledAt || ""}
+                  onChange={e => upd("scheduledAt", e.target.value)}
+                />
+              </FormField>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-4 border-t bg-gray-50 rounded-b-2xl flex-shrink-0">
+          <div className="flex gap-1">
+            {tabs.map((tab, i) => (
+              <div
+                key={tab.id}
+                className={`w-2 h-2 rounded-full transition-colors ${addLeadTab === tab.id ? "bg-blue-600" : "bg-gray-300"}`}
+              />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancel
+            </button>
+            <button
+              onClick={onSave}
+              disabled={savingLead || !leadForm.clientName || !leadForm.phone}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {savingLead ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {editingLead ? "Save Changes" : "Add Lead"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
