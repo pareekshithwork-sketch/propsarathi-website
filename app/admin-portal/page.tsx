@@ -10,7 +10,8 @@ interface Project {
   address: string; projectType: string; status: string; totalAreaAcres: number|null
   numTowers: number|null; numFloors: number|null; numUnits: number|null
   minPrice: number|null; maxPrice: number|null; currency: string; possessionDate: string
-  reraNumber: string; metroStation: string; metroDistanceKm: number|null
+  reraNumber: string; latitude: number|null; longitude: number|null
+  metroStation: string; metroDistanceKm: number|null
   airportDistanceKm: number|null; techParkDistanceKm: number|null; nearbyLandmarks: string
   description: string; amenities: string; highlights: string
   coverImage: string; brochureUrl: string; videoUrl: string
@@ -22,8 +23,9 @@ const EMPTY_PROJECT: Omit<Project, 'id'> = {
   name: '', slug: '', developer: '', city: 'Bangalore', location: '', address: '',
   projectType: 'Apartment', status: 'Pre-Launch', totalAreaAcres: null,
   numTowers: null, numFloors: null, numUnits: null, minPrice: null, maxPrice: null,
-  currency: 'INR', possessionDate: '', reraNumber: '', metroStation: '',
-  metroDistanceKm: null, airportDistanceKm: null, techParkDistanceKm: null,
+  currency: 'INR', possessionDate: '', reraNumber: '',
+  latitude: null, longitude: null,
+  metroStation: '', metroDistanceKm: null, airportDistanceKm: null, techParkDistanceKm: null,
   nearbyLandmarks: '', description: '', amenities: '', highlights: '',
   coverImage: '', brochureUrl: '', videoUrl: '', seoTitle: '', seoDescription: '',
   paymentPlan: '', isFeatured: false, isActive: true,
@@ -222,6 +224,8 @@ function ProjectModal({
             {select('Currency', 'currency', ['INR', 'AED', 'USD'])}
             {field('Possession Date', 'possessionDate', 'text', { placeholder: 'e.g. Dec 2026' })}
             {field('RERA Number', 'reraNumber')}
+            {field('Latitude', 'latitude', 'number', { placeholder: 'e.g. 13.3916 (for map pin)' })}
+            {field('Longitude', 'longitude', 'number', { placeholder: 'e.g. 77.7117 (for map pin)' })}
             {field('Metro Station', 'metroStation')}
             {field('Metro Distance (km)', 'metroDistanceKm', 'number')}
             {field('Airport Distance (km)', 'airportDistanceKm', 'number')}

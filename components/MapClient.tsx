@@ -34,29 +34,23 @@ interface POIResult {
 }
 
 interface Project {
-  name: string
+  id: number
   slug: string
+  name: string
   city: string
   location: string
-  lat: number
-  lng: number
+  latitude: number
+  longitude: number
   status: string
   minPrice: number
   maxPrice: number
   currency: string
-  type: string
+  projectType: string
   developer: string
+  coverImage?: string
 }
 
-// ─── Static project data ──────────────────────────────────────────────────────
-
-const PROJECTS: Project[] = [
-  { name: "Sattva Haven", slug: "sattva-haven-devanahalli", city: "Bangalore", location: "Devanahalli, North Bangalore", lat: 13.3916, lng: 77.7117, status: "Pre-Launch", minPrice: 7500000, maxPrice: 18000000, currency: "INR", type: "Apartment", developer: "Sattva Group" },
-  { name: "Brigade Orchards", slug: "brigade-orchards-devanahalli", city: "Bangalore", location: "Devanahalli, North Bangalore", lat: 13.3780, lng: 77.7050, status: "Just Launched", minPrice: 6500000, maxPrice: 22000000, currency: "INR", type: "Apartment", developer: "Brigade Group" },
-  { name: "Prestige Pine Forest", slug: "prestige-pine-forest-whitefield", city: "Bangalore", location: "Whitefield, East Bangalore", lat: 12.9698, lng: 77.7499, status: "Under Construction", minPrice: 12000000, maxPrice: 35000000, currency: "INR", type: "Apartment", developer: "Prestige Group" },
-  { name: "DAMAC Lagoons", slug: "damac-lagoons-dubai", city: "Dubai", location: "Dubai Land, Dubai", lat: 25.0289, lng: 55.2673, status: "Just Launched", minPrice: 1800000, maxPrice: 8500000, currency: "AED", type: "Villa", developer: "DAMAC Properties" },
-  { name: "Emaar Address Residences", slug: "emaar-address-residences-dubai", city: "Dubai", location: "Downtown Dubai", lat: 25.1972, lng: 55.2744, status: "Pre-Launch", minPrice: 2500000, maxPrice: 25000000, currency: "AED", type: "Apartment", developer: "Emaar" },
-]
+// ─── Status colours (no hardcoded projects) ──────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
   "Pre-Launch": "#F59E0B",
@@ -184,6 +178,7 @@ export default function MapClient() {
   const searchLayerGroupRef   = useRef<any>(null)
 
   const [city, setCity]               = useState<"Bangalore" | "Dubai">("Bangalore")
+  const [projects, setProjects]       = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showProjects, setShowProjects] = useState(true)
   const [mapReady, setMapReady]       = useState(false)
@@ -264,6 +259,18 @@ export default function MapClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Fetch projects from DB when city changes ─────────────────────────────────
+  useEffect(() => {
+    fetch(`/api/properties?city=${city}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          setProjects(data.projects.filter((p: any) => p.latitude && p.longitude))
+        }
+      })
+      .catch(() => {})
+  }, [city])
+
   // ── City bounding boxes for auto-detect ──────────────────────────────────────
   const CITY_BOUNDS: Record<string, { latMin: number; latMax: number; lngMin: number; lngMax: number }> = {
     Bangalore: { latMin: 12.7, latMax: 13.5, lngMin: 77.3, lngMax: 78.0 },
@@ -307,19 +314,19 @@ export default function MapClient() {
     const L = (window as any).L
     projectsLGRef.current.clearLayers()
     if (!showProjects) return
-    PROJECTS.filter(p => p.city === city).forEach(project => {
+    projects.forEach(project => {
       const color = STATUS_COLOR[project.status] || "#422D83"
       const icon = L.divIcon({
         className: "",
         html: `<div style="background:${color};color:white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);width:32px;height:32px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2px solid white;cursor:pointer;"><span style="transform:rotate(45deg);font-size:14px;">🏢</span></div>`,
         iconSize: [32, 32], iconAnchor: [16, 32],
       })
-      L.marker([project.lat, project.lng], { icon })
+      L.marker([project.latitude, project.longitude], { icon })
         .addTo(projectsLGRef.current)
         .on("click", () => setSelectedProject(project))
         .bindTooltip(`<b>${project.name}</b><br/>${project.location}`, { direction: "top", offset: [0, -34], className: "ps-tooltip" })
     })
-  }, [mapReady, showProjects, city])
+  }, [mapReady, showProjects, projects])
 
   // ── Swap tile layer when mapType changes ─────────────────────────────────────
   useEffect(() => {
@@ -480,11 +487,10 @@ export default function MapClient() {
     const lg = searchLayerGroupRef.current
     lg.clearLayers()
     if (searchResults.length === 0) return
-    const cityProjects = PROJECTS.filter(p => p.city === city)
     searchResults.forEach(poi => {
       let nearestName = "", nearestDist = Infinity
-      cityProjects.forEach(p => {
-        const d = haversineKm(poi.lat, poi.lng, p.lat, p.lng)
+      projects.forEach(p => {
+        const d = haversineKm(poi.lat, poi.lng, p.latitude, p.longitude)
         if (d < nearestDist) { nearestDist = d; nearestName = p.name }
       })
       const distText = nearestName
@@ -499,7 +505,7 @@ export default function MapClient() {
         .addTo(lg)
         .bindPopup(`<div style="font-family:system-ui,sans-serif;"><div style="font-weight:700;font-size:13px;color:#1f2937;margin-bottom:2px;">${poi.icon} ${poi.name}</div>${distText ? `<div style="font-size:11px;color:#6b7280;">📍 ${distText}</div>` : ""}</div>`)
     })
-  }, [mapReady, searchResults, city])
+  }, [mapReady, searchResults, projects])
 
   // ── Layer panel helpers ──────────────────────────────────────────────────────
   function selectAll() {
@@ -800,7 +806,7 @@ export default function MapClient() {
                         style={{ background: STATUS_COLOR[selectedProject.status] || "#422D83" }}>
                         {selectedProject.status}
                       </span>
-                      <span className="text-xs text-gray-400">{selectedProject.type}</span>
+                      <span className="text-xs text-gray-400">{selectedProject.projectType}</span>
                     </div>
                     <h3 className="font-bold text-gray-800 text-base leading-tight">{selectedProject.name}</h3>
                     <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
@@ -840,7 +846,7 @@ export default function MapClient() {
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-xs flex items-center gap-1 text-[#422D83]">
                     <Building2 className="w-3 h-3" />
-                    <strong>{PROJECTS.filter(p => p.city === city).length}</strong> Projects
+                    <strong>{projects.length}</strong> Project{projects.length !== 1 ? "s" : ""}
                   </span>
                   {kmlLayers.length > 0 && (
                     <span className="text-xs text-gray-400">

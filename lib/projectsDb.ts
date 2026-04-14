@@ -98,6 +98,8 @@ export async function updateProject(id: number, data: any) {
   if (data.reraNumber !== undefined) await sql`UPDATE projects SET rera_number = ${data.reraNumber} WHERE id = ${id}`
   if (data.metroStation !== undefined) await sql`UPDATE projects SET metro_station = ${data.metroStation} WHERE id = ${id}`
   if (data.metroDistanceKm !== undefined) await sql`UPDATE projects SET metro_distance_km = ${data.metroDistanceKm} WHERE id = ${id}`
+  if (data.latitude !== undefined) await sql`UPDATE projects SET latitude = ${data.latitude} WHERE id = ${id}`
+  if (data.longitude !== undefined) await sql`UPDATE projects SET longitude = ${data.longitude} WHERE id = ${id}`
   if (data.description !== undefined) await sql`UPDATE projects SET description = ${data.description} WHERE id = ${id}`
   if (data.amenities !== undefined) await sql`UPDATE projects SET amenities = ${data.amenities} WHERE id = ${id}`
   if (data.highlights !== undefined) await sql`UPDATE projects SET highlights = ${data.highlights} WHERE id = ${id}`
