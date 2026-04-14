@@ -746,8 +746,8 @@ export default function MapClient() {
           title={sidebarOpen ? "Collapse panel" : "Expand panel"}
         >
           {sidebarOpen
-            ? <ChevronLeft className="w-3.5 h-3.5 text-gray-500" />
-            : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
+            ? <ChevronLeft className="w-3.5 h-3.5 text-[#422D83]" />
+            : <ChevronRight className="w-3.5 h-3.5 text-[#422D83]" />}
         </button>
 
         {/* ── Map ── */}
