@@ -739,15 +739,15 @@ export default function MapClient() {
           className={`
             hidden md:flex absolute top-1/2 -translate-y-1/2 z-[950]
             items-center justify-center
-            w-5 h-12 bg-white border border-l-0 border-gray-200
-            rounded-r-lg shadow-md hover:bg-gray-50 transition-all duration-300
+            w-6 h-14 bg-[#422D83] hover:bg-[#2d1a60]
+            rounded-r-xl shadow-lg transition-all duration-300
             ${sidebarOpen ? "left-72" : "left-0"}
           `}
           title={sidebarOpen ? "Collapse panel" : "Expand panel"}
         >
           {sidebarOpen
-            ? <ChevronLeft className="w-3.5 h-3.5 text-[#422D83]" />
-            : <ChevronRight className="w-3.5 h-3.5 text-[#422D83]" />}
+            ? <ChevronLeft className="w-4 h-4 text-white" />
+            : <ChevronRight className="w-4 h-4 text-white" />}
         </button>
 
         {/* ── Map ── */}
