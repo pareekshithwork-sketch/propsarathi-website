@@ -520,6 +520,7 @@ function EMICalculator() {
   const [downStr, setDownStr] = useState('20')
   const [tenureStr, setTenureStr] = useState('20')
   const [rateStr, setRateStr] = useState('8.5')
+  const [priceFocused, setPriceFocused] = useState(false)
 
   const isAED = currency === 'AED'
 
@@ -623,7 +624,7 @@ function EMICalculator() {
               {(['INR', 'AED'] as const).map(c => (
                 <button key={c} onClick={() => switchCurrency(c)}
                   className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition ${currency === c ? 'bg-[#422D83] text-white shadow' : 'text-gray-300 hover:text-white'}`}>
-                  {c === 'INR' ? '₹ India (INR)' : '🇦🇪 Dubai (AED)'}
+                  {c === 'INR' ? '🇮🇳 India (INR)' : '🇦🇪 Dubai (AED)'}
                 </button>
               ))}
             </div>
@@ -635,11 +636,18 @@ function EMICalculator() {
                 <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2 py-1">
                   <span className="text-xs text-gray-400">{isAED ? 'AED' : '₹'}</span>
                   <input
-                    type="number"
-                    value={priceStr}
-                    onChange={e => { setPriceStr(e.target.value); const v = Number(e.target.value); if (v >= PRICE_MIN && v <= PRICE_MAX) setPrice(v) }}
-                    onBlur={() => commitPrice(priceStr)}
-                    className="w-28 bg-transparent text-white text-xs font-bold text-right focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    type="text"
+                    inputMode="numeric"
+                    value={priceFocused ? priceStr : Number(priceStr).toLocaleString(isAED ? 'en-US' : 'en-IN')}
+                    onFocus={() => setPriceFocused(true)}
+                    onChange={e => {
+                      const raw = e.target.value.replace(/,/g, '')
+                      setPriceStr(raw)
+                      const v = Number(raw)
+                      if (v >= PRICE_MIN && v <= PRICE_MAX) setPrice(v)
+                    }}
+                    onBlur={() => { setPriceFocused(false); commitPrice(priceStr) }}
+                    className="w-28 bg-transparent text-white text-xs font-bold text-right focus:outline-none"
                   />
                 </div>
               </div>
