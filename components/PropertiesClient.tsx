@@ -10,25 +10,30 @@ import {
 } from "lucide-react"
 import { usePortal } from "./PortalProvider"
 import { formatPrice } from "@/lib/portalAuth"
+import SavePropertyButton from "@/components/SavePropertyButton"
 
 const CITIES = ["All Cities", "Bangalore", "Dubai"]
-const PROJECT_TYPES = ["All Types", "Apartment", "Villa", "Plots", "Farmland", "Townhouse", "Villament"]
+const PROJECT_TYPES = ["All Types", "Apartment", "Villa", "Plots", "Farmland", "Townhouse", "Villament", "Commercial"]
 const STATUSES = ["All Status", "Pre-Launch", "Just Launched", "Under Construction", "Ready to Move"]
 const BEDROOM_OPTIONS = ["Any", "1", "2", "3", "4", "5+"]
 const BUDGET_RANGES_INR = [
   { label: "Any Budget", min: 0, max: 0 },
   { label: "Under ₹50L", min: 0, max: 5000000 },
-  { label: "₹50L - ₹1Cr", min: 5000000, max: 10000000 },
-  { label: "₹1Cr - ₹2Cr", min: 10000000, max: 20000000 },
-  { label: "₹2Cr - ₹5Cr", min: 20000000, max: 50000000 },
-  { label: "Above ₹5Cr", min: 50000000, max: 0 },
+  { label: "₹50L – ₹1Cr", min: 5000000, max: 10000000 },
+  { label: "₹1Cr – ₹3Cr", min: 10000000, max: 30000000 },
+  { label: "₹3Cr+", min: 30000000, max: 0 },
 ]
 const BUDGET_RANGES_AED = [
   { label: "Any Budget", min: 0, max: 0 },
-  { label: "Under AED 10L", min: 0, max: 1000000 },
-  { label: "AED 10L - 25L", min: 1000000, max: 2500000 },
-  { label: "AED 25L - 50L", min: 2500000, max: 5000000 },
-  { label: "Above AED 50L", min: 5000000, max: 0 },
+  { label: "Under AED 1M", min: 0, max: 1000000 },
+  { label: "AED 1M – 3M", min: 1000000, max: 3000000 },
+  { label: "AED 3M – 5M", min: 3000000, max: 5000000 },
+  { label: "AED 5M+", min: 5000000, max: 0 },
+]
+const SORT_OPTIONS = [
+  { label: "Newest First", value: "newest" },
+  { label: "Price: Low → High", value: "price_asc" },
+  { label: "Price: High → Low", value: "price_desc" },
 ]
 
 const STATUS_COLOR: Record<string, string> = {
@@ -56,10 +61,11 @@ export default function PropertiesClient() {
   const [status, setStatus] = useState(searchParams.get('status') || 'All Status')
   const [bedrooms, setBedrooms] = useState('Any')
   const [budgetIdx, setBudgetIdx] = useState(0)
+  const [sort, setSort] = useState('newest')
 
   const budgetRanges = city === 'Dubai' ? BUDGET_RANGES_AED : BUDGET_RANGES_INR
 
-  useEffect(() => { loadProjects() }, [city, type, status, search])
+  useEffect(() => { loadProjects() }, [city, type, status, search, budgetIdx, sort])
 
   async function loadProjects() {
     setLoading(true)
@@ -75,19 +81,24 @@ export default function PropertiesClient() {
 
       const res = await fetch(`/api/properties?${params}`)
       const data = await res.json()
-      if (data.success) setProjects(data.projects)
+      if (data.success) {
+        let results = data.projects
+        if (sort === 'price_asc') results = [...results].sort((a: any, b: any) => (a.minPrice || 0) - (b.minPrice || 0))
+        else if (sort === 'price_desc') results = [...results].sort((a: any, b: any) => (b.minPrice || 0) - (a.minPrice || 0))
+        setProjects(results)
+      }
     } catch {}
     setLoading(false)
   }
 
   function clearFilters() {
     setSearch(''); setCity('All Cities'); setType('All Types')
-    setStatus('All Status'); setBedrooms('Any'); setBudgetIdx(0)
+    setStatus('All Status'); setBedrooms('Any'); setBudgetIdx(0); setSort('newest')
   }
 
   const activeFilterCount = [
     city !== 'All Cities', type !== 'All Types', status !== 'All Status',
-    bedrooms !== 'Any', budgetIdx !== 0, search !== ''
+    bedrooms !== 'Any', budgetIdx !== 0, search !== '', sort !== 'newest'
   ].filter(Boolean).length
 
   return (
@@ -186,16 +197,20 @@ export default function PropertiesClient() {
                   {budgetRanges.map((b, i) => <option key={b.label} value={i}>{b.label}</option>)}
                 </select>
               </div>
-              <div className="flex gap-2">
-                <button onClick={loadProjects} className="px-4 py-2 bg-[#422D83] text-white text-sm font-medium rounded-lg hover:bg-[#2d1a60] transition">
-                  Apply
-                </button>
-                {activeFilterCount > 0 && (
-                  <button onClick={clearFilters} className="px-4 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 transition flex items-center gap-1">
-                    <X className="w-3.5 h-3.5" />Clear
-                  </button>
-                )}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Sort By</label>
+                <select value={sort} onChange={e => setSort(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83] bg-gray-50">
+                  {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
               </div>
+              {activeFilterCount > 0 && (
+                <div className="flex items-end">
+                  <button onClick={clearFilters} className="px-4 py-2 border border-gray-200 text-sm text-gray-600 rounded-lg hover:bg-gray-50 transition flex items-center gap-1">
+                    <X className="w-3.5 h-3.5" />Clear All
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -206,8 +221,11 @@ export default function PropertiesClient() {
         {/* Results count */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-gray-500">
-            {loading ? 'Loading...' : `${projects.length} project${projects.length !== 1 ? 's' : ''} found`}
+            {loading ? 'Searching...' : `${projects.length} project${projects.length !== 1 ? 's' : ''} found`}
             {city !== 'All Cities' && <span> in <strong>{city}</strong></span>}
+          </p>
+          <p className="text-xs text-gray-400 hidden sm:block">
+            {SORT_OPTIONS.find(o => o.value === sort)?.label}
           </p>
         </div>
 
@@ -252,6 +270,9 @@ function ProjectCardGrid({ project }: { project: any }) {
         </div>
         <div className="absolute top-3 right-3 bg-black/60 text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1">
           <MapPin className="w-3 h-3" />{project.city}
+        </div>
+        <div className="absolute bottom-3 right-3">
+          <SavePropertyButton slug={project.slug} />
         </div>
       </div>
       <div className="p-4">
@@ -306,7 +327,10 @@ function ProjectCardList({ project }: { project: any }) {
             <p className="font-bold text-gray-900">{formatPrice(project.minPrice, project.currency)}</p>
           </div>
           <span className="text-xs font-medium text-gray-400">{project.projectType} · {project.numUnits} units</span>
-          <span className="text-sm text-[#422D83] font-medium">View →</span>
+          <div className="flex items-center gap-2">
+            <SavePropertyButton slug={project.slug} />
+            <span className="text-sm text-[#422D83] font-medium">View →</span>
+          </div>
         </div>
       </div>
     </Link>

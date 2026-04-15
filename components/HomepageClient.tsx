@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
@@ -372,6 +372,9 @@ export default function HomepageClient({ featuredProjects }: Props) {
         )}
       </section>
 
+      {/* ── EMI CALCULATOR ── */}
+      <EMICalculator />
+
       {/* ── CITY TABS ── */}
       <section className="py-12 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4">
@@ -500,5 +503,101 @@ function ProjectCard({ project }: { project: Project }) {
         </div>
       </div>
     </Link>
+  )
+}
+
+// ─── EMI Calculator ───────────────────────────────────────────────────────────
+
+function EMICalculator() {
+  const [currency, setCurrency] = useState<'INR' | 'AED'>('INR')
+  const [price, setPrice] = useState(5000000)
+  const [downPct, setDownPct] = useState(20)
+  const [tenure, setTenure] = useState(20)
+  const [rate, setRate] = useState(8.5)
+
+  const { loanAmount, emi, totalInterest, totalPayable } = useMemo(() => {
+    const loan = price * (1 - downPct / 100)
+    const r = rate / 100 / 12
+    const n = tenure * 12
+    const emiVal = n === 0 || r === 0 ? loan / (n || 1) : loan * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1)
+    const total = emiVal * n
+    return { loanAmount: loan, emi: emiVal, totalInterest: total - loan, totalPayable: total }
+  }, [price, downPct, tenure, rate])
+
+  const fmt = (v: number) => currency === 'AED'
+    ? (v >= 1000000 ? `AED ${(v / 1000000).toFixed(2)}M` : `AED ${Math.round(v).toLocaleString()}`)
+    : (v >= 10000000 ? `₹${(v / 10000000).toFixed(2)} Cr` : `₹${Math.round(v / 100000).toFixed(1)} L`)
+
+  const defaultRate = currency === 'AED' ? 4.5 : 8.5
+  const defaultPrice = currency === 'AED' ? 2000000 : 5000000
+
+  function switchCurrency(c: 'INR' | 'AED') {
+    setCurrency(c)
+    setRate(c === 'AED' ? 4.5 : 8.5)
+    setPrice(c === 'AED' ? 2000000 : 5000000)
+  }
+
+  const sliders = [
+    { label: 'Property Price', value: price, setter: setPrice, min: currency === 'AED' ? 500000 : 1000000, max: currency === 'AED' ? 20000000 : 100000000, step: currency === 'AED' ? 100000 : 500000, display: fmt(price) },
+    { label: 'Down Payment', value: downPct, setter: setDownPct, min: 5, max: 50, step: 1, display: `${downPct}%` },
+    { label: 'Loan Tenure', value: tenure, setter: setTenure, min: 1, max: 30, step: 1, display: `${tenure} yrs` },
+    { label: 'Interest Rate', value: rate, setter: setRate, min: 1, max: 20, step: 0.1, display: `${rate}%` },
+  ]
+
+  return (
+    <section className="py-16 px-4 bg-gradient-to-br from-[#1a0f3d] to-[#2d1a60]">
+      <div className="max-w-5xl mx-auto">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">EMI Calculator</h2>
+          <p className="text-gray-300 text-sm">Estimate your monthly repayment instantly</p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-8 bg-white/10 backdrop-blur rounded-2xl p-6 md:p-8">
+          {/* Inputs */}
+          <div className="space-y-5">
+            {/* Currency toggle */}
+            <div className="flex gap-2 bg-white/10 rounded-xl p-1 w-fit">
+              {(['INR', 'AED'] as const).map(c => (
+                <button key={c} onClick={() => switchCurrency(c)}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition ${currency === c ? 'bg-[#422D83] text-white' : 'text-gray-300 hover:text-white'}`}>
+                  {c === 'INR' ? '₹ INR' : 'AED'}
+                </button>
+              ))}
+            </div>
+            {sliders.map(s => (
+              <div key={s.label}>
+                <div className="flex justify-between mb-1">
+                  <label className="text-xs text-gray-300 font-medium">{s.label}</label>
+                  <span className="text-xs font-bold text-white">{s.display}</span>
+                </div>
+                <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
+                  onChange={e => s.setter(Number(e.target.value))}
+                  className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer accent-[#8b78d4]" />
+                <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                  <span>{s.min}</span><span>{s.max}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Results */}
+          <div className="flex flex-col justify-center space-y-4">
+            <div className="bg-[#422D83] rounded-2xl p-6 text-center">
+              <p className="text-gray-300 text-sm mb-1">Monthly EMI</p>
+              <p className="text-3xl md:text-4xl font-bold text-white">{fmt(emi)}</p>
+            </div>
+            {[
+              { label: 'Loan Amount', value: loanAmount },
+              { label: 'Total Interest', value: totalInterest },
+              { label: 'Total Payable', value: totalPayable },
+            ].map(r => (
+              <div key={r.label} className="flex justify-between items-center bg-white/10 rounded-xl px-4 py-3">
+                <span className="text-gray-300 text-sm">{r.label}</span>
+                <span className="font-bold text-white text-sm">{fmt(r.value)}</span>
+              </div>
+            ))}
+            <p className="text-xs text-gray-500 text-center">* Indicative only. Actual EMI depends on lender terms.</p>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }

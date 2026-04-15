@@ -27,7 +27,7 @@ export async function addCRMLead(lead: any) {
       referral_name, referral_phone, referral_email,
       profession, company, designation, gender, dob, marital_status,
       sourcing_manager, closing_manager, possession_date, enquired_location,
-      purpose, buyer, payment_plan, channel_partner, carpet_area, saleable_area,
+      purpose, buyer, payment_plan, affiliate_partner, carpet_area, saleable_area,
       enquired_for, project_enquired, scheduled_at, is_deleted, is_duplicate
     ) VALUES (
       ${id}, ${lead.source||'Manual'}, ${lead.subSource||''}, ${lead.partnerId||''}, ${lead.partnerName||''},
@@ -41,7 +41,7 @@ export async function addCRMLead(lead: any) {
       ${lead.dob||''}, ${lead.maritalStatus||''},
       ${lead.sourcingManager||''}, ${lead.closingManager||''},
       ${lead.possessionDate||''}, ${lead.enquiredLocation||''},
-      ${lead.purpose||''}, ${lead.buyer||''}, ${lead.paymentPlan||''}, ${lead.channelPartner||''},
+      ${lead.purpose||''}, ${lead.buyer||''}, ${lead.paymentPlan||''}, ${lead.affiliatePartner||''},
       ${lead.carpetArea||''}, ${lead.saleableArea||''},
       ${lead.enquiredFor||''}, ${lead.projectEnquired||''}, ${lead.scheduledAt||''},
       FALSE, FALSE
@@ -88,7 +88,7 @@ export async function updateCRMLead(leadId: string, updates: any) {
   if (u.purpose !== undefined) await sql`UPDATE crm_leads SET purpose=${u.purpose}, last_updated=NOW() WHERE lead_id=${leadId}`
   if (u.buyer !== undefined) await sql`UPDATE crm_leads SET buyer=${u.buyer}, last_updated=NOW() WHERE lead_id=${leadId}`
   if (u.paymentPlan !== undefined) await sql`UPDATE crm_leads SET payment_plan=${u.paymentPlan}, last_updated=NOW() WHERE lead_id=${leadId}`
-  if (u.channelPartner !== undefined) await sql`UPDATE crm_leads SET channel_partner=${u.channelPartner}, last_updated=NOW() WHERE lead_id=${leadId}`
+  if (u.affiliatePartner !== undefined) await sql`UPDATE crm_leads SET affiliate_partner=${u.affiliatePartner}, last_updated=NOW() WHERE lead_id=${leadId}`
   if (u.carpetArea !== undefined) await sql`UPDATE crm_leads SET carpet_area=${u.carpetArea}, last_updated=NOW() WHERE lead_id=${leadId}`
   if (u.saleableArea !== undefined) await sql`UPDATE crm_leads SET saleable_area=${u.saleableArea}, last_updated=NOW() WHERE lead_id=${leadId}`
   if (u.enquiredFor !== undefined) await sql`UPDATE crm_leads SET enquired_for=${u.enquiredFor}, last_updated=NOW() WHERE lead_id=${leadId}`
@@ -144,7 +144,7 @@ export function rowToLead(row: any) {
     purpose: row.purpose || '',
     buyer: row.buyer || '',
     paymentPlan: row.payment_plan || '',
-    channelPartner: row.channel_partner || '',
+    affiliatePartner: row.affiliate_partner || '',
     carpetArea: row.carpet_area || '',
     saleableArea: row.saleable_area || '',
     enquiredFor: row.enquired_for || '',

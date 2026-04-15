@@ -9,8 +9,9 @@ import {
   TrendingUp, FileText, Building2, User, Menu, Bell,
   PhoneCall, PhoneOff, Eye, RefreshCw, Star, Flag,
   CheckCircle2, XCircle, Activity, BarChart3, Filter,
-  ChevronUp, Bookmark, Home, Briefcase, DollarSign,
+  ChevronUp, Bookmark, Home, Briefcase, DollarSign, Layers, PieChart,
 } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import MapEditor from "@/components/MapEditor"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -56,7 +57,7 @@ interface Lead {
   purpose: string
   buyer: string
   paymentPlan: string
-  channelPartner: string
+  affiliatePartner: string
   carpetArea: string
   saleableArea: string
   enquiredFor: string
@@ -158,7 +159,7 @@ const EMPTY_LEAD_FORM: Partial<Lead> = {
   referralName: "", referralPhone: "", referralEmail: "",
   profession: "", company: "", designation: "", gender: "", dob: "", maritalStatus: "",
   sourcingManager: "", closingManager: "", possessionDate: "", enquiredLocation: "",
-  purpose: "", buyer: "", paymentPlan: "", channelPartner: "", carpetArea: "", saleableArea: "",
+  purpose: "", buyer: "", paymentPlan: "", affiliatePartner: "", carpetArea: "", saleableArea: "",
   enquiredFor: "", projectEnquired: "", scheduledAt: "",
 }
 
@@ -251,7 +252,7 @@ export default function CRMPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   // ── View ──
-  const [view, setView] = useState<"dashboard" | "leads" | "data" | "map">("dashboard")
+  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "map">("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [search, setSearch] = useState("")
 
@@ -708,6 +709,8 @@ export default function CRMPage() {
           {[
             { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
             { id: "leads", label: "Leads", icon: Users, count: leads.filter(l => !l.isDeleted).length },
+            { id: "pipeline", label: "Pipeline", icon: Layers },
+            { id: "reports", label: "Reports", icon: BarChart3 },
             { id: "data", label: "Data", icon: Database, count: dataRecords.length },
             { id: "map", label: "Map", icon: MapPin },
           ].map(item => (
@@ -830,6 +833,15 @@ export default function CRMPage() {
               onAddLead={openAddLead}
               user={user}
             />
+          )}
+          {view === "pipeline" && (
+            <PipelineView leads={leads.filter(l => !l.isDeleted)} onStatusChange={async (leadId, newStatus) => {
+              await fetch(`/api/crm/leads/${leadId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
+              setLeads(prev => prev.map(l => l.leadId === leadId ? { ...l, status: newStatus } : l))
+            }} />
+          )}
+          {view === "reports" && (
+            <ReportsView leads={leads.filter(l => !l.isDeleted)} />
           )}
           {view === "data" && (
             <DataView
@@ -1160,10 +1172,40 @@ function LeadsView({
 
   const filters = ["All", "My Leads", "Team's", "Unassigned", "Duplicate", "Deleted"]
 
+  // Follow-up reminders
+  const today = new Date(); today.setHours(0,0,0,0)
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const DONE_STATUSES = ['Booked','Dropped','Not Interested']
+  const remindersToday = leads.filter((l: Lead) => {
+    if (!l.scheduledAt || DONE_STATUSES.includes(l.status)) return false
+    const d = new Date(l.scheduledAt); d.setHours(0,0,0,0)
+    return d.getTime() === today.getTime()
+  })
+  const remindersOverdue = leads.filter((l: Lead) => {
+    if (!l.scheduledAt || DONE_STATUSES.includes(l.status)) return false
+    const d = new Date(l.scheduledAt); d.setHours(0,0,0,0)
+    return d < today
+  })
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left: Lead list */}
       <div className={`${selectedLead ? "w-96 flex-shrink-0" : "flex-1"} flex flex-col border-r border-gray-200 bg-white overflow-hidden`}>
+        {/* Follow-up reminders banner */}
+        {(remindersToday.length > 0 || remindersOverdue.length > 0) && (
+          <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 flex gap-3 text-xs flex-wrap">
+            {remindersOverdue.length > 0 && (
+              <button onClick={() => setActiveLeadTab('Overdue')} className="flex items-center gap-1 text-red-600 font-semibold hover:underline">
+                <AlertCircle className="w-3.5 h-3.5" />{remindersOverdue.length} Overdue
+              </button>
+            )}
+            {remindersToday.length > 0 && (
+              <button onClick={() => setActiveLeadTab('Scheduled')} className="flex items-center gap-1 text-amber-700 font-semibold hover:underline">
+                <Clock className="w-3.5 h-3.5" />{remindersToday.length} Due Today
+              </button>
+            )}
+          </div>
+        )}
         {/* Filter tabs */}
         <div className="border-b border-gray-100 px-3 pt-2">
           <div className="flex gap-1 overflow-x-auto pb-2 scrollbar-hide">
@@ -1462,7 +1504,7 @@ function LeadOverviewTab({ lead }: { lead: Lead }) {
           <InfoRow label="Secondary Owner" value={lead.secondaryOwner} />
           <InfoRow label="Sourcing Manager" value={lead.sourcingManager} />
           <InfoRow label="Closing Manager" value={lead.closingManager} />
-          <InfoRow label="Channel Partner" value={lead.channelPartner} />
+          <InfoRow label="Affiliate Partner" value={lead.affiliatePartner} />
         </div>
       </section>
 
@@ -2166,8 +2208,8 @@ function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setAddLeadT
                 <FormField label="Designation">
                   <Input value={leadForm.designation || ""} onChange={e => upd("designation", e.target.value)} placeholder="Job title" />
                 </FormField>
-                <FormField label="Channel Partner">
-                  <Input value={leadForm.channelPartner || ""} onChange={e => upd("channelPartner", e.target.value)} placeholder="Channel partner name" />
+                <FormField label="Affiliate Partner">
+                  <Input value={leadForm.affiliatePartner || ""} onChange={e => upd("affiliatePartner", e.target.value)} placeholder="Affiliate partner name" />
                 </FormField>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -2268,6 +2310,197 @@ function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setAddLeadT
               {savingLead ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {editingLead ? "Save Changes" : "Add Lead"}
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Pipeline Kanban View ────────────────────────────────────────────────────
+
+const PIPELINE_STAGES = ['New','Callback','Meeting','Site Visit','Expression of Interest','Booked','Not Interested','Dropped']
+
+const STAGE_COL_COLORS: Record<string, string> = {
+  New: 'border-t-blue-400',
+  Callback: 'border-t-amber-400',
+  Meeting: 'border-t-indigo-400',
+  'Site Visit': 'border-t-purple-400',
+  'Expression of Interest': 'border-t-orange-400',
+  Booked: 'border-t-violet-600',
+  'Not Interested': 'border-t-gray-300',
+  Dropped: 'border-t-red-400',
+}
+
+function PipelineView({ leads, onStatusChange }: { leads: Lead[]; onStatusChange: (leadId: string, status: string) => void }) {
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
+
+  function handleDragStart(e: React.DragEvent, leadId: string) {
+    setDragging(leadId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function handleDrop(e: React.DragEvent, stage: string) {
+    e.preventDefault()
+    if (dragging) onStatusChange(dragging, stage)
+    setDragging(null)
+    setDragOver(null)
+  }
+
+  function handleDragOver(e: React.DragEvent, stage: string) {
+    e.preventDefault()
+    setDragOver(stage)
+  }
+
+  const byStage: Record<string, Lead[]> = {}
+  PIPELINE_STAGES.forEach(s => { byStage[s] = leads.filter(l => l.status === s) })
+
+  return (
+    <div className="h-full overflow-x-auto bg-gray-50">
+      <div className="flex gap-3 h-full p-4 min-w-max">
+        {PIPELINE_STAGES.map(stage => (
+          <div
+            key={stage}
+            onDragOver={e => handleDragOver(e, stage)}
+            onDrop={e => handleDrop(e, stage)}
+            onDragLeave={() => setDragOver(null)}
+            className={`w-52 flex-shrink-0 flex flex-col rounded-xl border border-gray-200 border-t-4 ${STAGE_COL_COLORS[stage]} bg-white shadow-sm ${dragOver === stage ? 'bg-blue-50' : ''}`}
+          >
+            <div className="px-3 py-2.5 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-700 truncate">{stage}</span>
+                <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full ml-1">{byStage[stage].length}</span>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-2">
+              {byStage[stage].map(lead => (
+                <div
+                  key={lead.leadId}
+                  draggable
+                  onDragStart={e => handleDragStart(e, lead.leadId)}
+                  className={`bg-white border border-gray-200 rounded-lg p-2.5 cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-shadow text-xs ${dragging === lead.leadId ? 'opacity-50' : ''}`}
+                >
+                  <p className="font-semibold text-gray-800 truncate">{lead.clientName || 'Unknown'}</p>
+                  <p className="text-gray-400 truncate mt-0.5">{lead.phone}</p>
+                  {lead.budget && <p className="text-[#422D83] font-medium mt-1">{lead.budget}</p>}
+                  <div className="flex items-center justify-between mt-1.5 gap-1">
+                    {lead.assignedRM ? <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full truncate">{lead.assignedRM}</span> : <span />}
+                    {lead.city && <span className="text-gray-400">{lead.city}</span>}
+                  </div>
+                </div>
+              ))}
+              {byStage[stage].length === 0 && (
+                <div className="text-center py-6 text-gray-300 text-xs">Drop here</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Reports View ────────────────────────────────────────────────────────────
+
+function ReportsView({ leads }: { leads: Lead[] }) {
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay())
+
+  const leadsThisMonth = leads.filter(l => new Date(l.createdAt) >= startOfMonth)
+  const leadsThisWeek = leads.filter(l => new Date(l.createdAt) >= startOfWeek)
+
+  const byStatus = PIPELINE_STAGES.map(s => ({ name: s === 'Expression of Interest' ? 'EOI' : s, count: leads.filter(l => l.status === s).length })).filter(s => s.count > 0)
+
+  const rmMap: Record<string, number> = {}
+  leads.forEach(l => { const rm = l.assignedRM || 'Unassigned'; rmMap[rm] = (rmMap[rm] || 0) + 1 })
+  const byRM = Object.entries(rmMap).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }))
+
+  const srcMap: Record<string, number> = {}
+  leads.forEach(l => { const s = l.source || 'Unknown'; srcMap[s] = (srcMap[s] || 0) + 1 })
+  const bySource = Object.entries(srcMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count }))
+
+  const PURPLE = ['#422D83','#5b40b0','#7d65cc','#9e8ada','#c0b4e9']
+
+  return (
+    <div className="h-full overflow-y-auto bg-gray-50 p-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        {[
+          { label: 'Total Leads', val: leads.length, bg: 'bg-[#422D83]' },
+          { label: 'This Month', val: leadsThisMonth.length, bg: 'bg-indigo-500' },
+          { label: 'This Week', val: leadsThisWeek.length, bg: 'bg-blue-500' },
+          { label: 'Booked', val: leads.filter(l => l.status === 'Booked').length, bg: 'bg-violet-600' },
+        ].map(c => (
+          <div key={c.label} className={`rounded-xl p-4 text-white ${c.bg}`}>
+            <p className="text-2xl font-bold">{c.val}</p>
+            <p className="text-xs opacity-80 mt-0.5">{c.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads by Status</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={byStatus} layout="vertical" margin={{ left: 8, right: 16 }}>
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
+              <Tooltip formatter={(v: any) => [v, 'Leads']} />
+              <Bar dataKey="count" radius={[0,4,4,0]}>
+                {byStatus.map((_, i) => <Cell key={i} fill={PURPLE[i % PURPLE.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads by RM</h3>
+          <div className="space-y-2.5 max-h-48 overflow-y-auto">
+            {byRM.map(r => (
+              <div key={r.name} className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 w-28 truncate">{r.name}</span>
+                <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-[#422D83] rounded-full" style={{ width: `${Math.round(r.count / (byRM[0]?.count || 1) * 100)}%` }} />
+                </div>
+                <span className="text-xs font-semibold text-gray-700 w-5 text-right">{r.count}</span>
+              </div>
+            ))}
+            {byRM.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No data yet</p>}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads by Source</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={bySource} margin={{ left: 0, right: 16, bottom: 48 }}>
+              <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip formatter={(v: any) => [v, 'Leads']} />
+              <Bar dataKey="count" radius={[4,4,0,0]}>
+                {bySource.map((_, i) => <Cell key={i} fill={PURPLE[i % PURPLE.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Booking Conversion by RM</h3>
+          <div className="space-y-2.5">
+            {byRM.map(r => {
+              const booked = leads.filter(l => l.assignedRM === r.name && l.status === 'Booked').length
+              const pct = r.count > 0 ? Math.round(booked / r.count * 100) : 0
+              return (
+                <div key={r.name} className="flex items-center gap-2">
+                  <span className="text-xs text-gray-600 w-28 truncate">{r.name}</span>
+                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-violet-500 rounded-full" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs text-gray-500 w-12 text-right">{booked}/{r.count}</span>
+                </div>
+              )
+            })}
+            {byRM.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No data yet</p>}
           </div>
         </div>
       </div>

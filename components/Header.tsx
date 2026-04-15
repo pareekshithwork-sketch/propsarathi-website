@@ -5,11 +5,19 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
+import { User } from "lucide-react"
 
 const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [clientName, setClientName] = useState<string | null>(null)
   const pathname = usePathname()
+
+  useEffect(() => {
+    fetch('/api/auth/client/me').then(r => r.json()).then(({ user }) => {
+      setClientName(user?.name ?? null)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     let ticking = false
@@ -85,8 +93,19 @@ const Header: React.FC = () => {
             <NavLinks className="flex items-center space-x-8" />
           </div>
 
-          {/* Phone - Right (Desktop only) */}
-          <div className="hidden md:flex justify-end">
+          {/* Right side — Phone + My Account (Desktop only) */}
+          <div className="hidden md:flex justify-end items-center gap-3">
+            {clientName ? (
+              <Link href="/client" className="flex items-center gap-1.5 text-sm font-medium text-[#422D83] bg-[#f5f3fd] px-4 py-2 rounded-full hover:bg-[#ede9fb] transition-colors">
+                <User size={15} />
+                {clientName}
+              </Link>
+            ) : (
+              <Link href="/client/login" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[#422D83] transition-colors px-3 py-2">
+                <User size={15} />
+                My Account
+              </Link>
+            )}
             <a
               href="tel:+917090303535"
               className="relative overflow-hidden bg-primary text-primary-foreground px-6 py-2 rounded-full font-semibold hover:bg-primary/90 transition-all duration-300 shadow-lg hover:shadow-xl border border-secondary/30"
@@ -130,6 +149,12 @@ const Header: React.FC = () => {
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-secondary/20 absolute top-full left-0 right-0 p-6 shadow-lg">
           <NavLinks className="flex flex-col space-y-4" />
+          <Link href={clientName ? '/client' : '/client/login'} onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center gap-2 text-foreground hover:text-secondary transition-colors duration-300 font-medium"
+          >
+            <User size={16} />
+            {clientName ? clientName : 'My Account'}
+          </Link>
           <a
             href="tel:+917090303535"
             className="mt-4 block text-center bg-primary text-primary-foreground px-6 py-3 rounded-full font-semibold border border-secondary/30"

@@ -20,7 +20,7 @@ export async function runCRMMigration() {
     await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS purpose TEXT DEFAULT ''`
     await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS buyer TEXT DEFAULT ''`
     await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS payment_plan TEXT DEFAULT ''`
-    await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS channel_partner TEXT DEFAULT ''`
+    await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS affiliate_partner TEXT DEFAULT ''`
     await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS landline TEXT DEFAULT ''`
     await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS alt_phone TEXT DEFAULT ''`
     await sql`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE`
