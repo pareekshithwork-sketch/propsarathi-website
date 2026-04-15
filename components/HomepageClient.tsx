@@ -515,85 +515,258 @@ function EMICalculator() {
   const [tenure, setTenure] = useState(20)
   const [rate, setRate] = useState(8.5)
 
-  const { loanAmount, emi, totalInterest, totalPayable } = useMemo(() => {
-    const loan = price * (1 - downPct / 100)
+  // Separate string states for the type inputs so partial typing works
+  const [priceStr, setPriceStr] = useState('5000000')
+  const [downStr, setDownStr] = useState('20')
+  const [tenureStr, setTenureStr] = useState('20')
+  const [rateStr, setRateStr] = useState('8.5')
+
+  const isAED = currency === 'AED'
+
+  // Realistic configs
+  const PRICE_MIN = isAED ? 500000 : 1000000
+  const PRICE_MAX = isAED ? 30000000 : 200000000
+  const PRICE_STEP = isAED ? 50000 : 50000
+
+  // ── EMI formula (standard reducing-balance) ──────────────────────────────
+  const { loanAmount, emi, totalInterest, totalPayable, downAmount } = useMemo(() => {
+    const down = price * (downPct / 100)
+    const loan = price - down
     const r = rate / 100 / 12
     const n = tenure * 12
-    const emiVal = n === 0 || r === 0 ? loan / (n || 1) : loan * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1)
+    if (n === 0) return { downAmount: down, loanAmount: loan, emi: 0, totalInterest: 0, totalPayable: loan }
+    const emiVal = r === 0
+      ? loan / n
+      : (loan * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1)
     const total = emiVal * n
-    return { loanAmount: loan, emi: emiVal, totalInterest: total - loan, totalPayable: total }
+    return { downAmount: down, loanAmount: loan, emi: emiVal, totalInterest: total - loan, totalPayable: total }
   }, [price, downPct, tenure, rate])
 
-  const fmt = (v: number) => currency === 'AED'
-    ? (v >= 1000000 ? `AED ${(v / 1000000).toFixed(2)}M` : `AED ${Math.round(v).toLocaleString()}`)
-    : (v >= 10000000 ? `₹${(v / 10000000).toFixed(2)} Cr` : `₹${Math.round(v / 100000).toFixed(1)} L`)
-
-  const defaultRate = currency === 'AED' ? 4.5 : 8.5
-  const defaultPrice = currency === 'AED' ? 2000000 : 5000000
-
-  function switchCurrency(c: 'INR' | 'AED') {
-    setCurrency(c)
-    setRate(c === 'AED' ? 4.5 : 8.5)
-    setPrice(c === 'AED' ? 2000000 : 5000000)
+  // ── Formatting ───────────────────────────────────────────────────────────
+  // For breakdowns (large numbers) — show in Cr/L or M/K
+  function fmtBig(v: number) {
+    if (isAED) {
+      if (v >= 1000000) return `AED ${(v / 1000000).toFixed(2)}M`
+      if (v >= 1000) return `AED ${(v / 1000).toFixed(0)}K`
+      return `AED ${Math.round(v).toLocaleString('en-US')}`
+    }
+    if (v >= 10000000) return `₹${(v / 10000000).toFixed(2)} Cr`
+    if (v >= 100000) return `₹${(v / 100000).toFixed(2)} L`
+    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`
+    return `₹${Math.round(v).toLocaleString('en-IN')}`
   }
 
-  const sliders = [
-    { label: 'Property Price', value: price, setter: setPrice, min: currency === 'AED' ? 500000 : 1000000, max: currency === 'AED' ? 20000000 : 100000000, step: currency === 'AED' ? 100000 : 500000, display: fmt(price) },
-    { label: 'Down Payment', value: downPct, setter: setDownPct, min: 5, max: 50, step: 1, display: `${downPct}%` },
-    { label: 'Loan Tenure', value: tenure, setter: setTenure, min: 1, max: 30, step: 1, display: `${tenure} yrs` },
-    { label: 'Interest Rate', value: rate, setter: setRate, min: 1, max: 20, step: 0.1, display: `${rate}%` },
-  ]
+  // For EMI — always full number with commas (never L/Cr — more intuitive monthly)
+  function fmtEMI(v: number) {
+    if (isAED) return `AED ${Math.round(v).toLocaleString('en-US')}`
+    return `₹${Math.round(v).toLocaleString('en-IN')}`
+  }
+
+  // Slider min/max labels
+  function fmtLabel(v: number, field: string) {
+    if (field === 'down') return `${v}%`
+    if (field === 'tenure') return `${v} yr`
+    if (field === 'rate') return `${v}%`
+    return fmtBig(v)
+  }
+
+  // ── Currency switch ───────────────────────────────────────────────────────
+  function switchCurrency(c: 'INR' | 'AED') {
+    setCurrency(c)
+    if (c === 'AED') {
+      setPrice(2000000); setPriceStr('2000000')
+      setRate(4.5); setRateStr('4.5')
+    } else {
+      setPrice(5000000); setPriceStr('5000000')
+      setRate(8.5); setRateStr('8.5')
+    }
+  }
+
+  // ── Sync helpers ─────────────────────────────────────────────────────────
+  function clamp(v: number, min: number, max: number) { return Math.min(max, Math.max(min, v)) }
+
+  function commitPrice(raw: string) {
+    const v = clamp(Number(raw.replace(/[^0-9.]/g, '')) || price, PRICE_MIN, PRICE_MAX)
+    setPrice(v); setPriceStr(String(v))
+  }
+  function commitDown(raw: string) {
+    const v = clamp(Number(raw) || downPct, 5, 80)
+    setDownPct(v); setDownStr(String(v))
+  }
+  function commitTenure(raw: string) {
+    const v = clamp(Math.round(Number(raw) || tenure), 1, 30)
+    setTenure(v); setTenureStr(String(v))
+  }
+  function commitRate(raw: string) {
+    const v = clamp(Number(raw) || rate, 1, 20)
+    setRate(Math.round(v * 10) / 10); setRateStr(String(Math.round(v * 10) / 10))
+  }
+
+  // ── Breakdown bar widths ──────────────────────────────────────────────────
+  const principalPct = totalPayable > 0 ? Math.round((loanAmount / totalPayable) * 100) : 0
+  const interestPct = 100 - principalPct
 
   return (
     <section className="py-16 px-4 bg-gradient-to-br from-[#1a0f3d] to-[#2d1a60]">
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-10">
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">EMI Calculator</h2>
-          <p className="text-gray-300 text-sm">Estimate your monthly repayment instantly</p>
+          <p className="text-gray-300 text-sm">Drag the sliders or type a value — your EMI updates instantly</p>
         </div>
+
         <div className="grid md:grid-cols-2 gap-8 bg-white/10 backdrop-blur rounded-2xl p-6 md:p-8">
-          {/* Inputs */}
-          <div className="space-y-5">
+
+          {/* ── LEFT: Inputs ── */}
+          <div className="space-y-6">
             {/* Currency toggle */}
             <div className="flex gap-2 bg-white/10 rounded-xl p-1 w-fit">
               {(['INR', 'AED'] as const).map(c => (
                 <button key={c} onClick={() => switchCurrency(c)}
-                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition ${currency === c ? 'bg-[#422D83] text-white' : 'text-gray-300 hover:text-white'}`}>
-                  {c === 'INR' ? '₹ INR' : 'AED'}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition ${currency === c ? 'bg-[#422D83] text-white shadow' : 'text-gray-300 hover:text-white'}`}>
+                  {c === 'INR' ? '₹ India (INR)' : '🇦🇪 Dubai (AED)'}
                 </button>
               ))}
             </div>
-            {sliders.map(s => (
-              <div key={s.label}>
-                <div className="flex justify-between mb-1">
-                  <label className="text-xs text-gray-300 font-medium">{s.label}</label>
-                  <span className="text-xs font-bold text-white">{s.display}</span>
-                </div>
-                <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
-                  onChange={e => s.setter(Number(e.target.value))}
-                  className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer accent-[#8b78d4]" />
-                <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
-                  <span>{s.min}</span><span>{s.max}</span>
+
+            {/* Property Price */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-gray-300 font-medium">Property Price</label>
+                <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2 py-1">
+                  <span className="text-xs text-gray-400">{isAED ? 'AED' : '₹'}</span>
+                  <input
+                    type="number"
+                    value={priceStr}
+                    onChange={e => { setPriceStr(e.target.value); const v = Number(e.target.value); if (v >= PRICE_MIN && v <= PRICE_MAX) setPrice(v) }}
+                    onBlur={() => commitPrice(priceStr)}
+                    className="w-28 bg-transparent text-white text-xs font-bold text-right focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
                 </div>
               </div>
-            ))}
-          </div>
-          {/* Results */}
-          <div className="flex flex-col justify-center space-y-4">
-            <div className="bg-[#422D83] rounded-2xl p-6 text-center">
-              <p className="text-gray-300 text-sm mb-1">Monthly EMI</p>
-              <p className="text-3xl md:text-4xl font-bold text-white">{fmt(emi)}</p>
+              <input type="range" min={PRICE_MIN} max={PRICE_MAX} step={PRICE_STEP} value={price}
+                onChange={e => { const v = Number(e.target.value); setPrice(v); setPriceStr(String(v)) }}
+                className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer accent-[#8b78d4]" />
+              <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                <span>{fmtBig(PRICE_MIN)}</span>
+                <span className="text-[#8b78d4] font-semibold text-xs">{fmtBig(price)}</span>
+                <span>{fmtBig(PRICE_MAX)}</span>
+              </div>
             </div>
+
+            {/* Down Payment */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-gray-300 font-medium">Down Payment</label>
+                <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2 py-1">
+                  <input
+                    type="number"
+                    value={downStr}
+                    min={5} max={80}
+                    onChange={e => { setDownStr(e.target.value); const v = Number(e.target.value); if (v >= 5 && v <= 80) setDownPct(v) }}
+                    onBlur={() => commitDown(downStr)}
+                    className="w-10 bg-transparent text-white text-xs font-bold text-right focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+              </div>
+              <input type="range" min={5} max={80} step={1} value={downPct}
+                onChange={e => { const v = Number(e.target.value); setDownPct(v); setDownStr(String(v)) }}
+                className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer accent-[#8b78d4]" />
+              <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                <span>5%</span>
+                <span className="text-[#8b78d4] font-semibold text-xs">{downPct}% = {fmtBig(downAmount)}</span>
+                <span>80%</span>
+              </div>
+            </div>
+
+            {/* Loan Tenure */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-gray-300 font-medium">Loan Tenure</label>
+                <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2 py-1">
+                  <input
+                    type="number"
+                    value={tenureStr}
+                    min={1} max={30}
+                    onChange={e => { setTenureStr(e.target.value); const v = Math.round(Number(e.target.value)); if (v >= 1 && v <= 30) setTenure(v) }}
+                    onBlur={() => commitTenure(tenureStr)}
+                    className="w-8 bg-transparent text-white text-xs font-bold text-right focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="text-xs text-gray-400">yrs</span>
+                </div>
+              </div>
+              <input type="range" min={1} max={30} step={1} value={tenure}
+                onChange={e => { const v = Number(e.target.value); setTenure(v); setTenureStr(String(v)) }}
+                className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer accent-[#8b78d4]" />
+              <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                <span>1 yr</span>
+                <span className="text-[#8b78d4] font-semibold text-xs">{tenure} years ({tenure * 12} EMIs)</span>
+                <span>30 yrs</span>
+              </div>
+            </div>
+
+            {/* Interest Rate */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs text-gray-300 font-medium">Interest Rate (p.a.)</label>
+                <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2 py-1">
+                  <input
+                    type="number"
+                    value={rateStr}
+                    min={1} max={20} step={0.1}
+                    onChange={e => { setRateStr(e.target.value); const v = Number(e.target.value); if (v >= 1 && v <= 20) setRate(v) }}
+                    onBlur={() => commitRate(rateStr)}
+                    className="w-10 bg-transparent text-white text-xs font-bold text-right focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+              </div>
+              <input type="range" min={1} max={20} step={0.1} value={rate}
+                onChange={e => { const v = Number(e.target.value); setRate(v); setRateStr(String(v)) }}
+                className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer accent-[#8b78d4]" />
+              <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                <span>1%</span>
+                <span className="text-[#8b78d4] font-semibold text-xs">{isAED ? 'UAE avg ~4–5%' : 'India avg ~8–9%'}</span>
+                <span>20%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── RIGHT: Results ── */}
+          <div className="flex flex-col justify-center space-y-4">
+            {/* EMI hero */}
+            <div className="bg-gradient-to-br from-[#422D83] to-[#5b40b0] rounded-2xl p-6 text-center shadow-xl">
+              <p className="text-purple-200 text-sm mb-1">Monthly EMI</p>
+              <p className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">{fmtEMI(emi)}</p>
+              <p className="text-purple-300 text-xs mt-2">{tenure} years @ {rate}% p.a.</p>
+            </div>
+
+            {/* Breakdown rows */}
             {[
-              { label: 'Loan Amount', value: loanAmount },
-              { label: 'Total Interest', value: totalInterest },
-              { label: 'Total Payable', value: totalPayable },
+              { label: 'Property Price', value: price, highlight: false },
+              { label: 'Down Payment', value: downAmount, highlight: false },
+              { label: 'Loan Amount', value: loanAmount, highlight: true },
+              { label: 'Total Interest', value: totalInterest, highlight: false },
+              { label: 'Total Payable', value: totalPayable, highlight: true },
             ].map(r => (
-              <div key={r.label} className="flex justify-between items-center bg-white/10 rounded-xl px-4 py-3">
+              <div key={r.label} className={`flex justify-between items-center rounded-xl px-4 py-3 ${r.highlight ? 'bg-white/20' : 'bg-white/10'}`}>
                 <span className="text-gray-300 text-sm">{r.label}</span>
-                <span className="font-bold text-white text-sm">{fmt(r.value)}</span>
+                <span className={`font-bold text-sm ${r.highlight ? 'text-white' : 'text-gray-200'}`}>{fmtBig(r.value)}</span>
               </div>
             ))}
+
+            {/* Principal vs Interest bar */}
+            <div className="bg-white/10 rounded-xl px-4 py-3">
+              <div className="flex justify-between text-[11px] text-gray-400 mb-1.5">
+                <span>Principal {principalPct}%</span>
+                <span>Interest {interestPct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-white/20 overflow-hidden flex">
+                <div className="h-full bg-[#8b78d4] transition-all duration-300" style={{ width: `${principalPct}%` }} />
+                <div className="h-full bg-orange-400 flex-1" />
+              </div>
+            </div>
+
             <p className="text-xs text-gray-500 text-center">* Indicative only. Actual EMI depends on lender terms.</p>
           </div>
         </div>
