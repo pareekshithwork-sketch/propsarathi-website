@@ -79,7 +79,7 @@ export default function SharedFooter() {
               </li>
               <li className="flex items-center gap-2 text-sm">
                 <Mail className="w-4 h-4 text-[#8b78d4] shrink-0" />
-                <a href="mailto:Contact@propsarathi.com" className="hover:text-[#8b78d4] transition">Contact@propsarathi.com</a>
+                <a href="mailto:contact@propsarathi.com" className="hover:text-[#8b78d4] transition">contact@propsarathi.com</a>
               </li>
               <li className="flex items-start gap-2 text-sm">
                 <MapPin className="w-4 h-4 text-[#8b78d4] shrink-0 mt-0.5" />

@@ -53,7 +53,7 @@ export default function ContactPage() {
             { icon: <Phone className="w-5 h-5" />, label: "India (Call / WhatsApp)", value: "+91 70903 03535", href: "tel:+917090303535", color: "bg-green-50 text-green-600" },
             { icon: <Phone className="w-5 h-5" />, label: "UAE (Call / WhatsApp)", value: "+971 58 866 0220", href: "tel:+971588660220", color: "bg-green-50 text-green-600" },
             { icon: <MessageCircle className="w-5 h-5" />, label: "WhatsApp Chat", value: "Chat with us instantly", href: "https://wa.me/917090303535", color: "bg-green-50 text-green-600" },
-            { icon: <Mail className="w-5 h-5" />, label: "Email", value: "Contact@propsarathi.com", href: "mailto:Contact@propsarathi.com", color: "bg-blue-50 text-blue-600" },
+            { icon: <Mail className="w-5 h-5" />, label: "Email", value: "contact@propsarathi.com", href: "mailto:contact@propsarathi.com", color: "bg-blue-50 text-blue-600" },
             { icon: <MapPin className="w-5 h-5" />, label: "Bangalore Office", value: "Bangalore, Karnataka 560001", href: "#", color: "bg-amber-50 text-amber-600" },
             { icon: <MapPin className="w-5 h-5" />, label: "Dubai Office", value: "Dubai, UAE", href: "#", color: "bg-purple-50 text-purple-600" },
           ].map(c => (
