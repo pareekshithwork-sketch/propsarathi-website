@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { Building2, Clock, Tag, ArrowRight, BookOpen } from 'lucide-react'
+import { Clock, Tag, ArrowRight, BookOpen } from 'lucide-react'
 import sql from '@/lib/db'
 import SharedFooter from '@/components/SharedFooter'
+import Logo from '@/components/Logo'
 
 export const metadata = {
   title: 'Blog & Insights | Real Estate Investment Guide - PropSarathi',
@@ -32,12 +33,7 @@ export default async function BlogPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-[#422D83] rounded-lg flex items-center justify-center">
-              <Building2 className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-bold text-gray-900">PropSarathi</span>
-          </Link>
+          <Logo size="sm" />
           <nav className="flex items-center gap-4 text-sm text-gray-600">
             <Link href="/properties" className="hover:text-[#422D83] transition">Properties</Link>
             <Link href="/blog" className="text-[#422D83] font-medium">Blog</Link>

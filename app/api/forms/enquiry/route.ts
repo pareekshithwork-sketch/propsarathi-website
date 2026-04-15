@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { appendToSheet } from '@/lib/googleSheets'
 import sql from '@/lib/db'
 import { getClientSession } from '@/lib/clientAuth'
+import { getAutoAssignRM } from '@/lib/leadAssignment'
 
 // Public endpoint — no auth required
 // Called by all website enquiry forms (homepage, property pages, NRI page, etc.)
@@ -22,20 +23,23 @@ export async function POST(req: NextRequest) {
       message || '',
     ].filter(Boolean).join('. ')
 
+    // Auto-assign to RM with fewest open leads
+    const assignedRM = await getAutoAssignRM()
+
     // Write to Google Sheets Leads tab
     await appendToSheet('Leads', [[
       leadId, '', ts, '', '', name, '', phone,
-      email || '', '', '', 'New', '', notes, ts, '', '',
+      email || '', '', '', 'New', assignedRM, notes, ts, '', '',
     ]])
 
     // Write to CRM DB leads table
     try {
       await sql`
         INSERT INTO crm_leads (
-          lead_id, source, client_name, phone, email, notes, last_note, status, created_at, last_updated
+          lead_id, source, client_name, phone, email, notes, last_note, status, assigned_rm, created_at, last_updated
         ) VALUES (
           ${leadId}, ${leadSource}, ${name}, ${phone}, ${email || ''},
-          ${notes}, ${notes}, 'New', NOW(), NOW()
+          ${notes}, ${notes}, 'New', ${assignedRM}, NOW(), NOW()
         )
       `
     } catch (dbErr) {

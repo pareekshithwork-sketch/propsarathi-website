@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import Header from "@/components/Header"
 import SharedFooter from "@/components/SharedFooter"
 import { Button } from "@/components/ui/button"
@@ -29,6 +28,7 @@ import {
   Home,
   BarChart3,
   Send,
+  Download,
 } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -1075,6 +1075,237 @@ function ResetPasswordView({ onBack }: { onBack: () => void }) {
   )
 }
 
+// ─── Commission & Materials tabs ─────────────────────────────────────────────
+
+function CommissionsTab() {
+  const [commissions, setCommissions] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  const STATUS_COLORS: Record<string, string> = {
+    'Pending': 'bg-amber-100 text-amber-700',
+    'Approved': 'bg-blue-100 text-blue-700',
+    'Paid': 'bg-green-100 text-green-700',
+    'Rejected': 'bg-red-100 text-red-700',
+  }
+
+  React.useEffect(() => {
+    fetch('/api/affiliate/commissions').then(r => r.json()).then(d => {
+      setCommissions(d.commissions || [])
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+
+  if (commissions.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-400">
+        <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+        <p className="font-medium">No commissions yet</p>
+        <p className="text-sm mt-1">Commissions are created when a referred lead is Booked</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {commissions.map(c => (
+        <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
+          <div>
+            <p className="text-sm font-medium text-gray-900">{c.property_name || 'Property'}</p>
+            <p className="text-xs text-gray-400">Lead: {c.lead_id} · {new Date(c.created_at).toLocaleDateString('en-IN')}</p>
+          </div>
+          <div className="text-right">
+            {c.commission_amount > 0 && <p className="text-sm font-semibold text-gray-900">₹{Number(c.commission_amount).toLocaleString('en-IN')}</p>}
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLORS[c.status] || 'bg-gray-100 text-gray-600'}`}>{c.status}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MaterialsTab() {
+  const [materials, setMaterials] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
+
+  const FILE_ICONS: Record<string, string> = {
+    pdf: '📄', image: '🖼️', video: '🎥', ppt: '📊', doc: '📝',
+  }
+
+  React.useEffect(() => {
+    fetch('/api/affiliate/materials').then(r => r.json()).then(d => {
+      setMaterials(d.materials || [])
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+
+  if (materials.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-400">
+        <Download className="w-12 h-12 mx-auto mb-3 opacity-30" />
+        <p className="font-medium">No materials available yet</p>
+        <p className="text-sm mt-1">Brochures, presentations, and marketing kits will appear here</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {materials.map(m => (
+        <a key={m.id} href={m.file_url} target="_blank" rel="noreferrer"
+          className="flex items-center gap-3 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-xl px-4 py-3 transition group">
+          <span className="text-2xl">{FILE_ICONS[m.file_type] || '📎'}</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-gray-900 truncate">{m.title}</p>
+            {m.description && <p className="text-xs text-gray-400 truncate">{m.description}</p>}
+            {m.city !== 'All' && <p className="text-xs text-blue-500">{m.city}</p>}
+          </div>
+          <Download className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition flex-shrink-0" />
+        </a>
+      ))}
+    </div>
+  )
+}
+
+// ─── Stage badge colours ──────────────────────────────────────────────────────
+
+const STAGE_COLORS: Record<string, string> = {
+  'New': 'bg-blue-100 text-blue-700',
+  'Callback': 'bg-amber-100 text-amber-700',
+  'Meeting': 'bg-indigo-100 text-indigo-700',
+  'Site Visit': 'bg-purple-100 text-purple-700',
+  'Expression of Interest': 'bg-orange-100 text-orange-700',
+  'Booked': 'bg-violet-100 text-violet-700',
+  'Not Interested': 'bg-gray-100 text-gray-600',
+  'Dropped': 'bg-red-100 text-red-700',
+}
+
+// ─── My Referrals Tab ────────────────────────────────────────────────────────
+
+function MyReferralsTab() {
+  const [leads, setLeads] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [expandedLead, setExpandedLead] = React.useState<string | null>(null)
+  const [notes, setNotes] = React.useState<Record<string, any[]>>({})
+  const [noteText, setNoteText] = React.useState('')
+  const [savingNote, setSavingNote] = React.useState(false)
+
+  React.useEffect(() => {
+    fetch('/api/affiliate/leads').then(r => r.json()).then(d => {
+      setLeads(d.leads || [])
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [])
+
+  async function loadNotes(leadId: string) {
+    const res = await fetch(`/api/affiliate/leads/${leadId}/notes`)
+    const data = await res.json()
+    setNotes(n => ({ ...n, [leadId]: data.notes || [] }))
+  }
+
+  async function addNote(leadId: string) {
+    if (!noteText.trim()) return
+    setSavingNote(true)
+    await fetch(`/api/affiliate/leads/${leadId}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: noteText.trim() }),
+    })
+    setNoteText('')
+    setSavingNote(false)
+    loadNotes(leadId)
+  }
+
+  function toggleExpand(leadId: string) {
+    if (expandedLead === leadId) {
+      setExpandedLead(null)
+    } else {
+      setExpandedLead(leadId)
+      if (!notes[leadId]) loadNotes(leadId)
+    }
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+  }
+
+  if (leads.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-400">
+        <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+        <p className="font-medium">No referrals yet</p>
+        <p className="text-sm mt-1">Use the "Refer a Lead" tab to submit your first referral</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-500 mb-4">{leads.length} referral{leads.length !== 1 ? 's' : ''} submitted</p>
+      {leads.map(lead => (
+        <div key={lead.lead_id} className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 cursor-pointer" onClick={() => toggleExpand(lead.lead_id)}>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center flex-shrink-0">
+                <User className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900 text-sm truncate">{lead.client_name}</p>
+                <p className="text-xs text-gray-400 truncate">{lead.phone} {lead.city ? `· ${lead.city}` : ''}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STAGE_COLORS[lead.status] || 'bg-gray-100 text-gray-600'}`}>
+                {lead.status}
+              </span>
+              <ArrowLeft className={`w-4 h-4 text-gray-400 transition-transform ${expandedLead === lead.lead_id ? '-rotate-90' : 'rotate-180'}`} />
+            </div>
+          </div>
+
+          {expandedLead === lead.lead_id && (
+            <div className="px-4 pb-4 pt-2 border-t border-gray-50 bg-gray-50/50 space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {lead.email && <div><span className="text-gray-400">Email:</span> <span className="text-gray-700">{lead.email}</span></div>}
+                {lead.budget && <div><span className="text-gray-400">Budget:</span> <span className="text-gray-700">{lead.budget}</span></div>}
+                {lead.property_type && <div><span className="text-gray-400">Type:</span> <span className="text-gray-700">{lead.property_type}</span></div>}
+                {lead.notes && <div className="col-span-2"><span className="text-gray-400">Notes:</span> <span className="text-gray-700">{lead.notes}</span></div>}
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Notes ({(notes[lead.lead_id] || []).length})</p>
+                {(notes[lead.lead_id] || []).map((n: any) => (
+                  <div key={n.id} className="bg-white rounded-lg px-3 py-2 mb-1.5 text-xs text-gray-700 border border-gray-100">
+                    <p>{n.note}</p>
+                    <p className="text-gray-400 mt-0.5">{new Date(n.created_at).toLocaleDateString('en-IN')}</p>
+                  </div>
+                ))}
+                <div className="flex gap-2 mt-2">
+                  <input
+                    value={noteText}
+                    onChange={e => setNoteText(e.target.value)}
+                    placeholder="Add a note..."
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-blue-400"
+                  />
+                  <button
+                    onClick={() => addNote(lead.lead_id)}
+                    disabled={savingNote || !noteText.trim()}
+                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {savingNote ? '...' : 'Add'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 function Dashboard({
@@ -1156,13 +1387,21 @@ function Dashboard({
           <TabsList className="w-full rounded-none border-b h-12 bg-gray-50">
             <TabsTrigger value="leads" className="flex-1">
               <Users className="w-4 h-4 mr-2" />
-              My Leads
+              My Referrals
             </TabsTrigger>
             <TabsTrigger value="submit-lead" className="flex-1">
               <Send className="w-4 h-4 mr-2" />
               Refer a Lead
             </TabsTrigger>
-            <TabsTrigger value="team" className="flex-1">
+            <TabsTrigger value="commissions" className="flex-1">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Commissions
+            </TabsTrigger>
+            <TabsTrigger value="materials" className="flex-1">
+              <Download className="w-4 h-4 mr-2" />
+              Materials
+            </TabsTrigger>
+            <TabsTrigger value="team" className="flex-1 hidden sm:flex">
               <Building2 className="w-4 h-4 mr-2" />
               My Team
             </TabsTrigger>
@@ -1173,15 +1412,19 @@ function Dashboard({
           </TabsList>
 
           <TabsContent value="leads" className="p-6">
-            <div className="text-center py-12 text-gray-400">
-              <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">No leads yet</p>
-              <p className="text-sm mt-1">Leads assigned to you will appear here</p>
-            </div>
+            <MyReferralsTab />
           </TabsContent>
 
           <TabsContent value="submit-lead" className="p-6">
             <SubmitLeadForm />
+          </TabsContent>
+
+          <TabsContent value="commissions" className="p-6">
+            <CommissionsTab />
+          </TabsContent>
+
+          <TabsContent value="materials" className="p-6">
+            <MaterialsTab />
           </TabsContent>
 
           <TabsContent value="team" className="p-6">

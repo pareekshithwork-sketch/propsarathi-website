@@ -3,6 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import Logo from '@/components/Logo'
 
 function RegisterForm() {
   const router = useRouter()
@@ -41,7 +42,7 @@ function RegisterForm() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Link href="/" className="text-2xl font-bold text-[#422D83]">PropSarathi</Link>
+          <Logo size="md" />
           <h1 className="text-xl font-semibold text-gray-800 mt-4">Create your account</h1>
           <p className="text-gray-500 text-sm mt-1">Save properties and track your enquiries</p>
         </div>

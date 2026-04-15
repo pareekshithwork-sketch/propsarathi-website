@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import jwt from 'jsonwebtoken'
 import { addCRMLead, addCRMHistory } from '@/lib/crmSheets'
+import sql from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,11 +27,15 @@ export async function POST(request: NextRequest) {
 
     const leadId = `LEAD-${Date.now()}`
     const partnerName = partnerData.name || partnerData.fullName || 'Partner'
+    const partnerId = partnerData.userId || partnerData.partnerId || ''
+
+    // Write to Google Sheets (existing behaviour)
     await addCRMLead({
       leadId,
-      source: `Partner: ${partnerName}`,
+      source: 'Affiliate Referral',
       partnerName,
-      partnerId: partnerData.partnerId || '',
+      partnerId,
+      affiliatePartner: partnerName,
       clientName,
       phone,
       countryCode: countryCode || '+91',
@@ -44,10 +49,27 @@ export async function POST(request: NextRequest) {
     })
     await addCRMHistory({
       recordId: leadId, recordType: 'lead',
-      action: 'Lead Created via Partner Portal',
+      action: 'Lead Created via Affiliate Portal',
       changedBy: partnerName,
       oldStatus: '', newStatus: 'New', notes: notes || '',
     })
+
+    // Also write to DB crm_leads so affiliates can query their own leads
+    try {
+      await sql`
+        INSERT INTO crm_leads (lead_id, source, affiliate_partner, partner_name, partner_id,
+          client_name, phone, country_code, email, city, property_type, budget, notes, last_note,
+          status, assigned_rm, is_deleted, is_duplicate)
+        VALUES (
+          ${leadId}, 'Affiliate Referral', ${partnerName}, ${partnerName}, ${partnerId},
+          ${clientName}, ${phone}, ${countryCode || '+91'}, ${email || ''},
+          ${city || ''}, ${propertyType || ''}, ${budget || ''},
+          ${notes || ''}, ${notes || ''}, 'New', '', FALSE, FALSE
+        )
+      `
+    } catch (dbErr) {
+      console.warn('[Partner Submit Lead] DB write failed (non-fatal):', dbErr)
+    }
 
     return NextResponse.json({ success: true, leadId, message: 'Lead submitted successfully' })
   } catch (error) {

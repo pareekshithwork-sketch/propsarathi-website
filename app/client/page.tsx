@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Heart, MessageSquare, User, LogOut, ChevronRight, Building2 } from 'lucide-react'
+import Logo from '@/components/Logo'
 
 interface ClientUser {
   id: number
@@ -116,7 +117,7 @@ export default function ClientDashboard() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="text-lg font-bold text-[#422D83]">PropSarathi</Link>
+        <Logo size="sm" />
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600 hidden sm:block">Hi, {user?.name}</span>
           <button onClick={logout} className="flex items-center gap-1 text-sm text-gray-500 hover:text-red-500 transition-colors">

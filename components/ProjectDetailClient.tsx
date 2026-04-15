@@ -12,6 +12,8 @@ import {
 } from "lucide-react"
 import { usePortal } from "./PortalProvider"
 import { formatPrice } from "@/lib/portalAuth"
+import Logo from "@/components/Logo"
+import SavePropertyButton from "@/components/SavePropertyButton"
 
 interface Unit {
   id: number; unitType: string; bedrooms: number; bathrooms: number
@@ -75,19 +77,16 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
     setSubmitting(true)
     try {
       const duration = Math.round((Date.now() - startTimeRef.current) / 1000)
-      await fetch('/api/portal/enquiry', {
+      await fetch('/api/forms/enquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectSlug: project.slug,
-          projectName: project.name,
-          type: 'enquiry',
-          durationSeconds: duration,
           name: enquiryForm.name,
           phone: enquiryForm.phone,
-          countryCode: enquiryForm.countryCode,
           email: enquiryForm.email,
-          notes: enquiryForm.message,
+          message: enquiryForm.message,
+          propertySlug: project.slug,
+          source: 'Property Page',
         })
       })
       setEnquirySent(true)
@@ -122,7 +121,7 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
           <Link href="/properties" className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
             <ArrowLeft className="w-4 h-4" />
-            <Image src="/propsarathi-logo.png" alt="PropSarathi" width={140} height={36} className="h-8 w-auto hidden sm:block" />
+            <Logo size="sm" href="" className="hidden sm:flex" />
             <span className="text-sm font-medium sm:hidden">All Properties</span>
           </Link>
           <div className="flex-1 min-w-0 text-center hidden md:block">
@@ -130,6 +129,7 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
             <p className="text-xs text-gray-400">{project.developer} · {project.location}</p>
           </div>
           <div className="flex items-center gap-2">
+            <SavePropertyButton slug={project.slug} />
             <div className="relative">
               <button onClick={() => setShareOpen(!shareOpen)}
                 className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">
@@ -528,7 +528,7 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
 
               <div className="mt-4 pt-4 border-t border-gray-100 flex items-start gap-2 text-xs text-gray-400">
                 <Shield className="w-4 h-4 shrink-0 text-[#422D83]" />
-                <p>Zero brokerage. Direct developer pricing. We are authorised channel partners.</p>
+                <p>Zero brokerage. Direct developer pricing. We are authorised affiliate partners.</p>
               </div>
             </div>
 

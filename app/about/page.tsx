@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { Building2, Shield, TrendingUp, Users, Award, MapPin, Phone, Mail, ArrowRight, CheckCircle, Search, FileCheck } from "lucide-react"
+import Logo from "@/components/Logo"
 import SharedFooter from "@/components/SharedFooter"
 import ProblemsAndSolutions from "@/components/ProblemsAndSolutions"
 import WhyChooseUs from "@/components/WhyChooseUs"
@@ -17,9 +17,7 @@ export default function AboutPage() {
     <div className="min-h-screen bg-white">
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/">
-            <Image src="/propsarathi-logo.png" alt="PropSarathi" width={140} height={36} className="h-8 w-auto" />
-          </Link>
+          <Logo size="sm" />
           <Link href="/properties" className="flex items-center gap-1.5 bg-[#422D83] text-white text-sm font-medium px-4 py-2 rounded-xl hover:bg-[#2d1a60] transition">
             Browse Properties <ArrowRight className="w-4 h-4" />
           </Link>

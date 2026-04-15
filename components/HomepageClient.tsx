@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
 import Link from "next/link"
 import {
   Search, MapPin, Building2, ChevronRight,
@@ -12,6 +11,7 @@ import {
 import { usePortal } from "./PortalProvider"
 import { formatPrice } from "@/lib/portalAuth"
 import SharedFooter from "./SharedFooter"
+import Logo from "@/components/Logo"
 
 const BANGALORE_AREAS = [
   "Devanahalli", "Devanahalli North", "Yelahanka", "Hebbal", "Hennur", "Thanisandra",
@@ -134,9 +134,7 @@ export default function HomepageClient({ featuredProjects, bangaloreCount, dubai
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center shrink-0">
-            <Image src="/propsarathi-logo.png" alt="PropSarathi" width={160} height={40} className="h-9 w-auto" />
-          </Link>
+          <Logo size="md" />
 
           {/* Right side */}
           <div className="flex items-center gap-2">
@@ -365,11 +363,18 @@ export default function HomepageClient({ featuredProjects, bangaloreCount, dubai
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Skeleton loaders */}
-            {[1,2,3,4,5,6].map(i => (
-              <div key={i} className="bg-gray-100 rounded-2xl h-80 animate-pulse" />
-            ))}
+          <div className="bg-gradient-to-br from-[#f5f3fd] to-white border border-[#e0d9f7] rounded-2xl py-16 px-8 text-center">
+            <div className="w-16 h-16 bg-[#422D83]/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Building2 className="w-8 h-8 text-[#422D83]" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Projects Coming Soon</h3>
+            <p className="text-gray-500 text-sm max-w-md mx-auto mb-6">
+              We are curating premium pre-launch and new launch properties in Bangalore and Dubai. Check back soon or register your interest.
+            </p>
+            <Link href="/contact"
+              className="inline-flex items-center gap-2 bg-[#422D83] text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#2d1a60] transition">
+              Register Your Interest <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
         )}
       </section>

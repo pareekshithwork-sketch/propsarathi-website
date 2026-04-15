@@ -4,8 +4,8 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import Image from "next/image"
 import { User } from "lucide-react"
+import Logo from "@/components/Logo"
 
 const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -78,15 +78,7 @@ const Header: React.FC = () => {
       <div className="container mx-auto px-4 md:px-6 py-3 md:py-4">
         <div className="flex justify-between items-center md:grid md:grid-cols-3 gap-4">
           {/* Logo - Left */}
-          <Link href="/" className="flex items-center flex-shrink-0">
-            <Image
-              src="/propsarathi-logo.png"
-              alt="PropSarathi"
-              width={180}
-              height={45}
-              className="h-8 md:h-10 w-auto"
-            />
-          </Link>
+          <Logo size="md" />
 
           {/* Navigation - Center (Desktop only) */}
           <div className="hidden md:flex justify-center">

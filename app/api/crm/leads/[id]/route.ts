@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { verifyCRMToken } from '@/lib/crmAuth'
 import { getCRMLeads, updateCRMLead, addCRMHistory, getRecordHistory } from '@/lib/crmSheets'
+import sql from '@/lib/db'
 
 function auth(request: NextRequest) {
   const token = request.cookies.get('crm_token')?.value
@@ -47,6 +48,31 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         oldStatus, newStatus: body.status,
         notes: body.notes || '',
       })
+
+      // Auto-create commission when lead reaches Booked and has an affiliate
+      if (body.status === 'Booked' && current?.affiliatePartner) {
+        try {
+          await sql`
+            CREATE TABLE IF NOT EXISTS affiliate_commissions (
+              id SERIAL PRIMARY KEY, affiliate_name TEXT NOT NULL,
+              affiliate_id TEXT NOT NULL DEFAULT '', lead_id TEXT NOT NULL,
+              property_slug TEXT NOT NULL DEFAULT '', property_name TEXT NOT NULL DEFAULT '',
+              commission_amount NUMERIC(12,2) DEFAULT 0, status TEXT NOT NULL DEFAULT 'Pending',
+              notes TEXT DEFAULT '', created_at TIMESTAMPTZ DEFAULT NOW(),
+              approved_at TIMESTAMPTZ, paid_at TIMESTAMPTZ
+            )
+          `
+          const existing = await sql`SELECT id FROM affiliate_commissions WHERE lead_id = ${id}`
+          if (!existing.length) {
+            await sql`
+              INSERT INTO affiliate_commissions (affiliate_name, lead_id, property_name, status)
+              VALUES (${current.affiliatePartner}, ${id}, ${current.projectEnquired || current.propertyType || ''}, 'Pending')
+            `
+          }
+        } catch (e) {
+          console.warn('[Commission auto-create]', e)
+        }
+      }
     } else if (body.lastNote) {
       await addCRMHistory({
         recordId: id, recordType: 'lead',
@@ -72,6 +98,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = auth(request)
   if (!user) return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
+  if (user.role !== 'admin') return NextResponse.json({ success: false, message: 'Only admins can delete leads' }, { status: 403 })
 
   try {
     const { id } = await params

@@ -13,6 +13,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/about`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
     { url: `${base}/contact`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
     { url: `${base}/nri`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${base}/map`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${base}/partner`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.6 },
+    { url: `${base}/partner-portal`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${base}/client/login`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
+    { url: `${base}/client/register`, lastModified: new Date(), changeFrequency: 'yearly', priority: 0.3 },
   ]
 
   // Project pages
