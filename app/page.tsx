@@ -14,10 +14,14 @@ export const metadata = {
 
 export default async function HomePage() {
   let featuredProjects: any[] = []
+  let bangaloreCount = 0
+  let dubaiCount = 0
   try {
     const all = await getAllProjects()
     featuredProjects = all.filter((p: any) => p.isFeatured).slice(0, 6)
+    bangaloreCount = all.filter((p: any) => p.city === 'Bangalore').length
+    dubaiCount = all.filter((p: any) => p.city === 'Dubai').length
   } catch {}
 
-  return <HomepageClient featuredProjects={featuredProjects} />
+  return <HomepageClient featuredProjects={featuredProjects} bangaloreCount={bangaloreCount} dubaiCount={dubaiCount} />
 }

@@ -58,6 +58,8 @@ interface Project {
 
 interface Props {
   featuredProjects: Project[]
+  bangaloreCount: number
+  dubaiCount: number
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -67,7 +69,7 @@ const STATUS_COLOR: Record<string, string> = {
   'Ready to Move': 'bg-purple-500',
 }
 
-export default function HomepageClient({ featuredProjects }: Props) {
+export default function HomepageClient({ featuredProjects, bangaloreCount, dubaiCount }: Props) {
   const router = useRouter()
   const { viewer, isLoggedIn, showLoginModal, logout } = usePortal()
   const [search, setSearch] = useState("")
@@ -386,14 +388,14 @@ export default function HomepageClient({ featuredProjects }: Props) {
                 tagline: "India's Silicon Valley",
                 desc: "Pre-launch & new launch projects in Devanahalli, Whitefield, Sarjapur, Hebbal & more",
                 image: "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?w=800&q=80",
-                count: "30+ Projects",
+                count: bangaloreCount > 0 ? `${bangaloreCount} Project${bangaloreCount > 1 ? 's' : ''}` : "Coming Soon",
               },
               {
                 city: "Dubai",
                 tagline: "World's #1 Investment Destination",
-                desc: "Luxury apartments, villas & townhouses from DAMAC, Emaar, Binghatti & more",
+                desc: "Luxury apartments, villas & townhouses across Dubai Marina, Downtown, Palm & more",
                 image: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=800&q=80",
-                count: "20+ Projects",
+                count: dubaiCount > 0 ? `${dubaiCount} Project${dubaiCount > 1 ? 's' : ''}` : "Coming Soon",
               }
             ].map(c => (
               <Link key={c.city} href={`/properties?city=${c.city}`}
