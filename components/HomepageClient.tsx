@@ -520,9 +520,10 @@ function EMICalculator() {
   const [downStr, setDownStr] = useState('20')
   const [tenureStr, setTenureStr] = useState('20')
   const [rateStr, setRateStr] = useState('8.5')
-  const [priceFocused, setPriceFocused] = useState(false)
-
   const isAED = currency === 'AED'
+
+  // formatted display string — always has commas, recalculates when currency or priceStr changes
+  const priceDisplay = Number(priceStr).toLocaleString(isAED ? 'en-US' : 'en-IN')
 
   // Realistic configs
   const PRICE_MIN = isAED ? 500000 : 1000000
@@ -638,15 +639,14 @@ function EMICalculator() {
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={priceFocused ? priceStr : Number(priceStr).toLocaleString(isAED ? 'en-US' : 'en-IN')}
-                    onFocus={() => setPriceFocused(true)}
+                    value={priceDisplay}
                     onChange={e => {
-                      const raw = e.target.value.replace(/,/g, '')
-                      setPriceStr(raw)
+                      const raw = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')
+                      setPriceStr(raw || '0')
                       const v = Number(raw)
                       if (v >= PRICE_MIN && v <= PRICE_MAX) setPrice(v)
                     }}
-                    onBlur={() => { setPriceFocused(false); commitPrice(priceStr) }}
+                    onBlur={() => commitPrice(priceStr)}
                     className="w-28 bg-transparent text-white text-xs font-bold text-right focus:outline-none"
                   />
                 </div>
