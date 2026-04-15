@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { Building2, MapPin, TrendingUp, Shield, Globe, ArrowRight, CheckCircle, Phone, ChevronRight } from "lucide-react"
 import SharedFooter from "@/components/SharedFooter"
+import { LogoCompact } from "@/components/Logo"
 import { formatPrice } from "@/lib/portalAuth"
 
 const NRI_COUNTRIES = [
@@ -52,12 +53,7 @@ export default function NRIPageClient({ dubaiProjects, bangaloreProjects }: { du
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-[#422D83] rounded-lg flex items-center justify-center">
-              <Building2 className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-bold text-gray-900">PropSarathi</span>
-          </Link>
+          <LogoCompact />
           <nav className="hidden md:flex items-center gap-6 text-sm">
             <Link href="/properties" className="text-gray-500 hover:text-[#422D83]">Properties</Link>
             <Link href="/about" className="text-gray-500 hover:text-[#422D83]">About</Link>

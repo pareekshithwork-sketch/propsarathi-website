@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import Link from "next/link"
 import { MapPin, X, ExternalLink, Building2, ChevronLeft, ChevronRight, ChevronDown, Layers, Search } from "lucide-react"
+import { LogoCompact } from "@/components/Logo"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -575,12 +576,7 @@ export default function MapClient() {
           <ChevronLeft className="w-4 h-4" />
           <span className="text-sm font-medium hidden sm:block">Back</span>
         </Link>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-[#422D83] rounded-lg flex items-center justify-center">
-            <MapPin className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold text-gray-800 text-sm">PropSarathi Investment Map</span>
-        </div>
+        <LogoCompact />
         {/* City switcher */}
         <div className="ml-auto flex items-center gap-1 bg-gray-100 rounded-xl p-1">
           {(["Bangalore", "Dubai"] as const).map(c => (

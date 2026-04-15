@@ -11,7 +11,7 @@ import {
 import { usePortal } from "./PortalProvider"
 import { formatPrice } from "@/lib/portalAuth"
 import SharedFooter from "./SharedFooter"
-import Logo from "@/components/Logo"
+import { LogoCompact } from "@/components/Logo"
 
 const BANGALORE_AREAS = [
   "Devanahalli", "Devanahalli North", "Yelahanka", "Hebbal", "Hennur", "Thanisandra",
@@ -134,7 +134,7 @@ export default function HomepageClient({ featuredProjects, bangaloreCount, dubai
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
 
           {/* Logo */}
-          <Logo size="md" />
+          <LogoCompact />
 
           {/* Right side */}
           <div className="flex items-center gap-2">

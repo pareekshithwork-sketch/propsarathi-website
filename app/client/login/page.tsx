@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import Logo from '@/components/Logo'
+import { LogoCompact } from '@/components/Logo'
 
 function LoginForm() {
   const router = useRouter()
@@ -38,7 +38,7 @@ function LoginForm() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Logo size="md" />
+          <LogoCompact />
           <h1 className="text-xl font-semibold text-gray-800 mt-4">Welcome back</h1>
           <p className="text-gray-500 text-sm mt-1">Sign in to your account</p>
         </div>

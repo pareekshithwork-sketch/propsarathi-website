@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import MapEditor from "@/components/MapEditor"
+import { LogoCompact } from "@/components/Logo"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -653,10 +654,10 @@ export default function CRMPage() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-indigo-900">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
-              <Building2 className="w-8 h-8 text-white" />
+            <div className="flex justify-center mb-3">
+              <LogoCompact href="" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">PropSarathi CRM</h1>
+            <h1 className="text-xl font-bold text-gray-900">CRM Login</h1>
             <p className="text-gray-500 text-sm mt-1">Sign in to your account</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -707,17 +708,12 @@ export default function CRMPage() {
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? "w-56" : "w-14"} bg-[#1a1f2e] text-white flex flex-col transition-all duration-200 flex-shrink-0`}>
         {/* Logo */}
-        <div className={`flex items-center gap-3 p-4 border-b border-white/10 ${!sidebarOpen && "justify-center"}`}>
+        <div className={`flex items-center gap-2 p-4 border-b border-white/10 ${!sidebarOpen && "justify-center"}`}>
           {sidebarOpen ? (
             <>
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Building2 className="w-4 h-4 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm leading-tight truncate">PropSarathi</p>
-                <p className="text-xs text-blue-400 font-medium">CRM</p>
-              </div>
-              <button onClick={() => setSidebarOpen(false)} className="text-white/40 hover:text-white">
+              <LogoCompact href="" dark={true} className="flex-1 min-w-0" />
+              <span className="text-xs text-blue-400 font-medium flex-shrink-0">CRM</span>
+              <button onClick={() => setSidebarOpen(false)} className="text-white/40 hover:text-white flex-shrink-0">
                 <ChevronLeft className="w-4 h-4" />
               </button>
             </>

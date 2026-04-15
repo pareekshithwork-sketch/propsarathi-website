@@ -1,40 +1,91 @@
-import Link from 'next/link'
-import { Building2 } from 'lucide-react'
+"use client"
 
-interface LogoProps {
-  variant?: 'full' | 'icon'
-  size?: 'sm' | 'md' | 'lg'
-  href?: string
-  className?: string
-}
+import Link from "next/link"
 
 /**
- * Shared PropSarathi logo component.
- * variant="full"  — purple icon square + "PropSarathi" text (default)
- * variant="icon"  — purple icon square only
- * size="sm"       — 7x7 square, text-base
- * size="md"       — 9x9 square, text-lg  (default)
- * size="lg"       — 11x11 square, text-xl
+ * PropSarathi brand logo — built entirely in SVG + styled text.
+ *
+ * LogoFull    — icon + "PropSarathi" text + tagline  (landing headers, footer)
+ * LogoCompact — icon + "PropSarathi" text, no tagline (sticky/small headers)
+ *
+ * Both wrap themselves in a Next.js <Link href="/" />.
+ * Pass href="" to suppress the link wrapper (e.g. when already inside a <Link>).
  */
-export default function Logo({ variant = 'full', size = 'md', href = '/', className = '' }: LogoProps) {
-  const sizes = {
-    sm: { box: 'w-7 h-7', icon: 'w-3.5 h-3.5', text: 'text-base', rounded: 'rounded-lg' },
-    md: { box: 'w-9 h-9', icon: 'w-5 h-5', text: 'text-lg', rounded: 'rounded-xl' },
-    lg: { box: 'w-11 h-11', icon: 'w-6 h-6', text: 'text-xl', rounded: 'rounded-xl' },
-  }
-  const s = sizes[size]
 
-  const content = (
-    <span className={`flex items-center gap-2 ${className}`}>
-      <span className={`${s.box} bg-[#422D83] ${s.rounded} flex items-center justify-center flex-shrink-0`}>
-        <Building2 className={`${s.icon} text-white`} />
+const PURPLE = "#422D83"
+const ORANGE = "#F97316"
+
+/** The chevron/roof SVG icon */
+function PropSarathiIcon({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      {/* Outer purple chevron/roof shape */}
+      <path
+        d="M20 4 L36 18 L36 36 L26 36 L26 24 L14 24 L14 36 L4 36 L4 18 Z"
+        fill={PURPLE}
+      />
+      {/* Small orange triangle at bottom center — the "S" accent dot */}
+      <polygon points="20,26 24,36 16,36" fill={ORANGE} />
+    </svg>
+  )
+}
+
+interface LogoProps {
+  href?: string
+  className?: string
+  /** dark=true — use white for "Prop" text; for use on dark/navy backgrounds */
+  dark?: boolean
+}
+
+function LogoContent({ showTagline, dark = false, className = "" }: {
+  showTagline: boolean
+  dark?: boolean
+  className?: string
+}) {
+  const propColor = dark ? "#ffffff" : PURPLE
+  return (
+    <span className={`flex items-center gap-2 select-none ${className}`}>
+      <PropSarathiIcon size={showTagline ? 36 : 30} />
+      <span className="flex flex-col leading-none">
+        <span className="font-bold text-base leading-tight tracking-tight">
+          <span style={{ color: propColor }}>Prop</span>
+          <span style={{ color: ORANGE }}>Sarathi</span>
+        </span>
+        {showTagline && (
+          <span
+            className="text-[10px] font-medium leading-tight mt-0.5"
+            style={{ color: ORANGE }}
+          >
+            Behind Every Confident Investment
+          </span>
+        )}
       </span>
-      {variant === 'full' && (
-        <span className={`font-bold text-gray-900 ${s.text}`}>PropSarathi</span>
-      )}
     </span>
   )
+}
 
+/** Full logo — icon + text + tagline. For landing headers and footer. */
+export function LogoFull({ href = "/", className = "", dark = false }: LogoProps) {
+  const content = <LogoContent showTagline={true} dark={dark} className={className} />
   if (!href) return content
   return <Link href={href}>{content}</Link>
+}
+
+/** Compact logo — icon + text, no tagline. For sticky/small headers. */
+export function LogoCompact({ href = "/", className = "", dark = false }: LogoProps) {
+  const content = <LogoContent showTagline={false} dark={dark} className={className} />
+  if (!href) return content
+  return <Link href={href}>{content}</Link>
+}
+
+/** Default export for backward compatibility — renders LogoCompact */
+export default function Logo({ href = "/", className = "", dark = false }: LogoProps) {
+  return <LogoCompact href={href} className={className} dark={dark} />
 }

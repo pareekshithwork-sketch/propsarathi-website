@@ -7,7 +7,7 @@ import {
   Search, MapPin, Building2, SlidersHorizontal, X, ChevronDown,
   Menu, User, LogOut, ArrowLeft, Grid3X3, List
 } from "lucide-react"
-import Logo from "@/components/Logo"
+import { LogoCompact } from "@/components/Logo"
 import { usePortal } from "./PortalProvider"
 import { formatPrice } from "@/lib/portalAuth"
 import SavePropertyButton from "@/components/SavePropertyButton"
@@ -109,7 +109,7 @@ export default function PropertiesClient() {
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
           <Link href="/" className="flex items-center gap-1.5 text-gray-600 hover:text-gray-900 transition shrink-0">
             <ArrowLeft className="w-4 h-4" />
-            <Logo size="sm" href="" />
+            <LogoCompact href="" />
           </Link>
 
           {/* Search */}

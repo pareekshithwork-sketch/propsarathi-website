@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Building2, Users, MessageSquare, LogOut, Plus, Pencil, Trash2, X, Eye, EyeOff, RefreshCw, ChevronDown, ChevronUp } from "lucide-react"
-import Logo from "@/components/Logo"
+import { LogoCompact } from "@/components/Logo"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Project {
@@ -71,11 +71,11 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-8">
-          <Logo size="md" href="" />
-          <div>
-            <h1 className="font-bold text-gray-900">Admin Portal</h1>
-            <p className="text-xs text-gray-400">Secure Portal</p>
+        <div className="flex flex-col items-center mb-8 gap-2">
+          <LogoCompact />
+          <div className="text-center">
+            <h1 className="font-bold text-gray-900 text-sm">Admin Portal</h1>
+            <p className="text-xs text-gray-400">Secure access</p>
           </div>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

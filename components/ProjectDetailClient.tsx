@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import { usePortal } from "./PortalProvider"
 import { formatPrice } from "@/lib/portalAuth"
-import Logo from "@/components/Logo"
+import { LogoCompact } from "@/components/Logo"
 import SavePropertyButton from "@/components/SavePropertyButton"
 
 interface Unit {
@@ -121,7 +121,7 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
           <Link href="/properties" className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
             <ArrowLeft className="w-4 h-4" />
-            <Logo size="sm" href="" className="hidden sm:flex" />
+            <LogoCompact href="" className="hidden sm:flex" />
             <span className="text-sm font-medium sm:hidden">All Properties</span>
           </Link>
           <div className="flex-1 min-w-0 text-center hidden md:block">

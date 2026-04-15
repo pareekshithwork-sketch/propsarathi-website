@@ -1,5 +1,6 @@
 import Link from "next/link"
-import { Building2, Phone, Mail, MapPin, Instagram, Linkedin } from "lucide-react"
+import { Phone, Mail, MapPin, Instagram, Linkedin } from "lucide-react"
+import { LogoFull } from "@/components/Logo"
 
 export default function SharedFooter() {
   return (
@@ -8,11 +9,8 @@ export default function SharedFooter() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-gray-800">
           {/* Brand */}
           <div className="md:col-span-1">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 bg-[#422D83] rounded-lg flex items-center justify-center">
-                <Building2 className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-bold text-white text-lg">PropSarathi</span>
+            <div className="mb-4">
+              <LogoFull dark={true} />
             </div>
             <p className="text-sm text-gray-400 leading-relaxed mb-4">
               Your trusted charioteer in real estate. Expert advisory for Bangalore &amp; Dubai markets.
