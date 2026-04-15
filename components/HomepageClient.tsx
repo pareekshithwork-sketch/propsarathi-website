@@ -520,10 +520,44 @@ function EMICalculator() {
   const [downStr, setDownStr] = useState('20')
   const [tenureStr, setTenureStr] = useState('20')
   const [rateStr, setRateStr] = useState('8.5')
+  const priceInputRef = useRef<HTMLInputElement>(null)
   const isAED = currency === 'AED'
 
-  // formatted display string — always has commas, recalculates when currency or priceStr changes
-  const priceDisplay = Number(priceStr).toLocaleString(isAED ? 'en-US' : 'en-IN')
+  // Format with commas — used for the live display
+  function formatWithCommas(raw: string) {
+    const n = Number(raw.replace(/[^0-9]/g, ''))
+    if (isNaN(n) || raw === '') return raw
+    return n.toLocaleString(isAED ? 'en-US' : 'en-IN')
+  }
+
+  // Handle price typing — strip commas, update state, restore cursor
+  function handlePriceChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const input = e.target
+    const cursorBefore = input.selectionStart ?? 0
+    const oldVal = input.value
+    // Count digits before cursor in old value (ignoring commas)
+    const digitsBeforeCursor = oldVal.slice(0, cursorBefore).replace(/,/g, '').length
+
+    const raw = oldVal.replace(/,/g, '').replace(/[^0-9]/g, '')
+    const newFormatted = raw === '' ? '' : Number(raw).toLocaleString(isAED ? 'en-US' : 'en-IN')
+
+    setPriceStr(raw || '0')
+    const v = Number(raw)
+    if (v >= PRICE_MIN && v <= PRICE_MAX) setPrice(v)
+
+    // After React re-render, restore cursor to correct digit position
+    requestAnimationFrame(() => {
+      const el = priceInputRef.current
+      if (!el) return
+      let count = 0, pos = 0
+      for (let i = 0; i < newFormatted.length; i++) {
+        if (newFormatted[i] !== ',' && newFormatted[i] !== ' ') count++
+        if (count === digitsBeforeCursor) { pos = i + 1; break }
+        pos = i + 1
+      }
+      el.setSelectionRange(pos, pos)
+    })
+  }
 
   // Realistic configs
   const PRICE_MIN = isAED ? 500000 : 1000000
@@ -637,22 +671,18 @@ function EMICalculator() {
                 <div className="flex items-center gap-1 bg-white/15 rounded-lg px-2 py-1">
                   <span className="text-xs text-gray-400">{isAED ? 'AED' : '₹'}</span>
                   <input
+                    ref={priceInputRef}
                     type="text"
                     inputMode="numeric"
-                    value={priceDisplay}
-                    onChange={e => {
-                      const raw = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '')
-                      setPriceStr(raw || '0')
-                      const v = Number(raw)
-                      if (v >= PRICE_MIN && v <= PRICE_MAX) setPrice(v)
-                    }}
+                    value={formatWithCommas(priceStr)}
+                    onChange={handlePriceChange}
                     onBlur={() => commitPrice(priceStr)}
                     className="w-28 bg-transparent text-white text-xs font-bold text-right focus:outline-none"
                   />
                 </div>
               </div>
               <input type="range" min={PRICE_MIN} max={PRICE_MAX} step={PRICE_STEP} value={price}
-                onChange={e => { const v = Number(e.target.value); setPrice(v); setPriceStr(String(v)) }}
+                onChange={e => { const v = Number(e.target.value); setPrice(v); setPriceStr(String(v)) }}  // priceStr stays raw; formatWithCommas handles display
                 className="w-full h-2 bg-white/20 rounded-full appearance-none cursor-pointer accent-[#8b78d4]" />
               <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
                 <span>{fmtBig(PRICE_MIN)}</span>
