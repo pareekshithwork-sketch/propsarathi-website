@@ -3,16 +3,23 @@
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import {
-  MapPin, Building2, Home, ArrowLeft, Share2, Phone,
+  MapPin, Building2, Home, ArrowLeft, Phone,
   ChevronRight, CheckCircle, Train, Plane, Briefcase,
-  Calendar, Shield, Ruler, Layers, Hash, Copy,
-  MessageCircle, Linkedin, Twitter, X, ChevronLeft, ChevronRight as ChevronR,
+  Calendar, Shield, Ruler, Layers, Hash,
+  X, ChevronLeft, ChevronRight as ChevronR,
   ExternalLink, Download, Play, Eye, ZoomIn, Globe
 } from "lucide-react"
 import { usePortal } from "./PortalProvider"
 import { formatPrice } from "@/lib/portalAuth"
 import { LogoCompact } from "@/components/Logo"
 import SavePropertyButton from "@/components/SavePropertyButton"
+import SecureDocumentViewer from "@/components/SecureDocumentViewer"
+import ReferralTimer from "@/components/ReferralTimer"
+import ShareButton from "@/components/ShareButton"
+import PhoneVerificationScreen from "@/components/PhoneVerificationScreen"
+import { ActivityTracker } from "@/lib/activityTracker"
+import { captureReferral } from "@/lib/referral"
+import { getDeviceFingerprint } from "@/lib/deviceAuth"
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -64,6 +71,7 @@ const TABS = [
   { id: 'floor-plans', label: 'Floor Plans' },
   { id: 'developer', label: 'Developer' },
   { id: 'location', label: 'Location' },
+  { id: 'brochure', label: 'Brochure' },
   { id: 'gallery', label: 'Gallery' },
 ]
 
@@ -75,6 +83,7 @@ const NAV_LINKS = [
   { id: 'floor-plans', icon: '📐', label: 'Floor Plans' },
   { id: 'developer', icon: '🏢', label: 'About Developer' },
   { id: 'location', icon: '📍', label: 'Location & Nearby' },
+  { id: 'brochure', icon: '📄', label: 'Brochure' },
   { id: 'gallery', icon: '🖼️', label: 'Gallery' },
 ]
 
@@ -131,11 +140,19 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
   const [activeSection, setActiveSection] = useState('overview')
   const [galleryIdx, setGalleryIdx] = useState(0)
   const [galleryOpen, setGalleryOpen] = useState(false)
-  const [shareOpen, setShareOpen] = useState(false)
   const [enquiryOpen, setEnquiryOpen] = useState(false)
   const [enquiryForm, setEnquiryForm] = useState({ name: viewer?.name || '', phone: viewer?.phone || '', countryCode: '+91', email: '', message: '' })
   const [enquirySent, setEnquirySent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Referral + secure docs state
+  const [clientUser, setClientUser] = useState<{ clientId: number; email: string; name: string } | null | undefined>(undefined)
+  const [isDeviceVerified, setIsDeviceVerified] = useState(false)
+  const [showVerify, setShowVerify] = useState(false)
+  const [refCode, setRefCode] = useState<string | null>(null)
+  const [refSharerName, setRefSharerName] = useState<string | null>(null)
+  const [refRmName, setRefRmName] = useState<string | null>(null)
+  const trackerRef = useRef<ActivityTracker | null>(null)
+  const fpRef = useRef<string>('')
   const startTimeRef = useRef(Date.now())
   const tabBarRef = useRef<HTMLDivElement>(null)
 
@@ -145,6 +162,53 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
     startTimeRef.current = Date.now()
     return () => { stopTracking() }
   }, [project.slug])
+
+  // Init referral capture, activity tracker, client session, device check
+  useEffect(() => {
+    trackerRef.current = new ActivityTracker()
+    fpRef.current = getDeviceFingerprint()
+
+    // Capture referral code from URL
+    const params = new URLSearchParams(window.location.search)
+    const ref = params.get('ref')
+    if (ref) {
+      captureReferral(ref)
+      setRefCode(ref)
+      fetch('/api/share/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: ref }),
+      }).then(r => r.json()).then(d => {
+        if (d.sharerName) setRefSharerName(d.sharerName)
+        if (d.rmName) setRefRmName(d.rmName)
+      }).catch(() => {})
+      trackerRef.current.track({ eventType: 'referral_visit', projectSlug: project.slug, shareCode: ref })
+    }
+
+    // Fetch client session + device status
+    fetch('/api/auth/client/me').then(r => {
+      if (!r.ok) { setClientUser(null); return null }
+      return r.json()
+    }).then(user => {
+      if (!user) { setClientUser(null); return }
+      setClientUser({ clientId: user.id, email: user.email, name: user.name })
+      fetch('/api/auth/client/check-device', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fingerprint: fpRef.current }),
+      }).then(r => r.json()).then(d => { setIsDeviceVerified(!!d.verified) }).catch(() => {})
+    }).catch(() => { setClientUser(null) })
+
+    // Listen for verify trigger from SecureDocumentViewer locked state
+    const onShowVerify = () => setShowVerify(true)
+    document.addEventListener('ps:show-verify', onShowVerify)
+
+    return () => {
+      trackerRef.current?.destroy()
+      document.removeEventListener('ps:show-verify', onShowVerify)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Prefill form if logged in
   useEffect(() => {
@@ -225,24 +289,12 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
           name: enquiryForm.name, phone: enquiryForm.phone,
           email: enquiryForm.email, message: enquiryForm.message,
           propertySlug: project.slug, source: 'Property Page',
+          shareCode: refCode ?? undefined,
         })
       })
       setEnquirySent(true)
     } catch {}
     setSubmitting(false)
-  }
-
-  function handleShare(platform: string) {
-    const url = encodeURIComponent(window.location.href)
-    const text = encodeURIComponent(`Check out ${project.name} by ${project.developer} in ${project.location}! Starting ${formatPrice(project.minPrice, project.currency)} - via PropSarathi`)
-    const links: Record<string, string> = {
-      whatsapp: `https://wa.me/?text=${text}%20${url}`,
-      linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${url}`,
-      twitter: `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
-    }
-    if (platform === 'copy') { navigator.clipboard.writeText(window.location.href); setShareOpen(false); return }
-    window.open(links[platform], '_blank')
-    setShareOpen(false)
   }
 
   // Parse JSON fields safely
@@ -280,28 +332,12 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
           </div>
           <div className="flex items-center gap-2">
             <SavePropertyButton slug={project.slug} />
-            <div className="relative">
-              <button onClick={() => setShareOpen(!shareOpen)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">
-                <Share2 className="w-4 h-4" /><span className="hidden sm:block">Share</span>
-              </button>
-              {shareOpen && (
-                <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl w-48 overflow-hidden z-50">
-                  {[
-                    { key: 'whatsapp', icon: <MessageCircle className="w-4 h-4 text-green-500" />, label: 'WhatsApp' },
-                    { key: 'linkedin', icon: <Linkedin className="w-4 h-4 text-blue-600" />, label: 'LinkedIn' },
-                    { key: 'twitter', icon: <Twitter className="w-4 h-4 text-sky-500" />, label: 'Twitter / X' },
-                  ].map(s => (
-                    <button key={s.key} onClick={() => handleShare(s.key)} className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-gray-50 transition">
-                      {s.icon}{s.label}
-                    </button>
-                  ))}
-                  <button onClick={() => handleShare('copy')} className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-gray-50 transition border-t border-gray-100">
-                    <Copy className="w-4 h-4 text-gray-500" />Copy Link
-                  </button>
-                </div>
-              )}
-            </div>
+            <ShareButton
+              projectSlug={project.slug}
+              projectName={project.name}
+              isLoggedIn={clientUser !== null && clientUser !== undefined}
+              redirectPath={`/properties/${project.slug}`}
+            />
             <button
               onClick={() => { if (!isLoggedIn) { showLoginModal(false, project.name); return } setEnquiryOpen(true) }}
               className="px-4 py-2 bg-[#F17322] hover:bg-[#d4621a] text-white text-sm font-semibold rounded-xl transition">
@@ -542,6 +578,19 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
                 SECTION 4 — PAYMENT PLAN
             ══════════════════════════════════════════════════ */}
             <Section id="payment-plan" title="Payment Plan">
+              {/* Secure payment plan document */}
+              {clientUser !== undefined && (
+                <div className="mb-5">
+                  <SecureDocumentViewer
+                    projectSlug={project.slug}
+                    docType="payment_plan"
+                    title="Payment Plan Document"
+                    isLoggedIn={clientUser !== null}
+                    isDeviceVerified={isDeviceVerified}
+                    redirectPath={`/properties/${project.slug}`}
+                  />
+                </div>
+              )}
               {hasPaymentPlan ? (
                 <div className="space-y-5">
                   {/* Three-step visual */}
@@ -588,6 +637,20 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
                 SECTION 5 — FLOOR PLANS
             ══════════════════════════════════════════════════ */}
             <Section id="floor-plans" title="Floor Plans">
+              {/* Secure uploaded floor plan documents */}
+              {clientUser !== undefined && (
+                <div className="mb-5">
+                  <SecureDocumentViewer
+                    projectSlug={project.slug}
+                    docType="floor_plan"
+                    title="Floor Plans"
+                    isLoggedIn={clientUser !== null}
+                    isDeviceVerified={isDeviceVerified}
+                    redirectPath={`/properties/${project.slug}`}
+                  />
+                </div>
+              )}
+              {/* Static floor plan images from JSON (legacy/fallback) */}
               {floorPlans.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {floorPlans.map((fp, i) => (
@@ -766,7 +829,25 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
             </Section>
 
             {/* ══════════════════════════════════════════════════
-                SECTION 8 — GALLERY
+                SECTION 8 — BROCHURE
+            ══════════════════════════════════════════════════ */}
+            <Section id="brochure" title="Project Brochure">
+              {clientUser !== undefined ? (
+                <SecureDocumentViewer
+                  projectSlug={project.slug}
+                  docType="brochure"
+                  title="Project Brochure"
+                  isLoggedIn={clientUser !== null}
+                  isDeviceVerified={isDeviceVerified}
+                  redirectPath={`/properties/${project.slug}`}
+                />
+              ) : (
+                <p className="text-gray-400 text-sm text-center py-8">Loading…</p>
+              )}
+            </Section>
+
+            {/* ══════════════════════════════════════════════════
+                SECTION 9 — GALLERY
             ══════════════════════════════════════════════════ */}
             <Section id="gallery" title="Photo Gallery">
               {allImages.length > 0 ? (
@@ -957,6 +1038,26 @@ export default function ProjectDetailClient({ project }: { project: Project }) {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── REFERRAL TIMER (shown to non-logged-in visitors from share links) ── */}
+      {refCode && clientUser === null && (
+        <ReferralTimer
+          shareCode={refCode}
+          redirectPath={`/properties/${project.slug}`}
+          sharerName={refSharerName ?? undefined}
+          rmName={refRmName ?? undefined}
+        />
+      )}
+
+      {/* ── PHONE VERIFICATION OVERLAY ── */}
+      {showVerify && clientUser && (
+        <PhoneVerificationScreen
+          fingerprint={fpRef.current}
+          userEmail={clientUser.email}
+          onVerified={() => { setIsDeviceVerified(true); setShowVerify(false) }}
+          onDismiss={() => setShowVerify(false)}
+        />
       )}
     </div>
   )

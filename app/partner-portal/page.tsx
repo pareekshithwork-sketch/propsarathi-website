@@ -29,6 +29,10 @@ import {
   BarChart3,
   Send,
   Download,
+  Share2,
+  Copy,
+  Check,
+  ExternalLink,
 } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -1183,6 +1187,92 @@ const STAGE_COLORS: Record<string, string> = {
   'Dropped': 'bg-red-100 text-red-700',
 }
 
+// ─── My Links Tab ────────────────────────────────────────────────────────────
+
+function MyLinksTab() {
+  const [links, setLinks] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/share/my-links')
+      .then(r => r.json())
+      .then(d => { if (d.links) setLinks(d.links) })
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function copyLink(url: string, code: string) {
+    try { await navigator.clipboard.writeText(url) } catch { /* ignore */ }
+    setCopiedCode(code)
+    setTimeout(() => setCopiedCode(null), 2000)
+  }
+
+  if (loading) {
+    return <div className="text-center py-12 text-gray-400"><Loader2 className="animate-spin mx-auto mb-2" size={24} />Loading…</div>
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">My Share Links</h3>
+        <p className="text-sm text-gray-500">Share these tracked links with prospects</p>
+      </div>
+      {links.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <Share2 size={32} className="mx-auto mb-3 opacity-40" />
+          <p>No share links yet. Share a property from the website to generate a tracked link.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {links.map((link: any) => (
+            <div key={link.code} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-gray-800">{link.project_slug}</p>
+                  <p className="text-xs text-gray-400 font-mono mt-0.5">{link.code}</p>
+                </div>
+                <div className="flex gap-4 text-center shrink-0">
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{link.clicks}</p>
+                    <p className="text-xs text-gray-400">Clicks</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-[#422D83]">{link.leads_count}</p>
+                    <p className="text-xs text-gray-400">Leads</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={link.url}
+                  className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-600 truncate"
+                />
+                <button
+                  onClick={() => copyLink(link.url, link.code)}
+                  className="shrink-0 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500"
+                >
+                  {copiedCode === link.code ? <Check size={15} className="text-green-600" /> : <Copy size={15} />}
+                </button>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  className="shrink-0 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-500"
+                >
+                  <ExternalLink size={15} />
+                </a>
+              </div>
+              <p className="text-xs text-gray-400">
+                Created {new Date(link.created_at).toLocaleDateString()}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── My Referrals Tab ────────────────────────────────────────────────────────
 
 function MyReferralsTab() {
@@ -1405,6 +1495,10 @@ function Dashboard({
               <Building2 className="w-4 h-4 mr-2" />
               My Team
             </TabsTrigger>
+            <TabsTrigger value="my-links" className="flex-1 hidden sm:flex">
+              <Share2 className="w-4 h-4 mr-2" />
+              My Links
+            </TabsTrigger>
             <TabsTrigger value="profile" className="flex-1">
               <User className="w-4 h-4 mr-2" />
               Profile
@@ -1433,6 +1527,10 @@ function Dashboard({
               <p className="font-medium">No team members yet</p>
               <p className="text-sm mt-1">Your downline partners will appear here</p>
             </div>
+          </TabsContent>
+
+          <TabsContent value="my-links" className="p-6">
+            <MyLinksTab />
           </TabsContent>
 
           <TabsContent value="profile" className="p-6">

@@ -253,7 +253,10 @@ export default function CRMPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   // ── View ──
-  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "projects" | "map" | "blog">("dashboard")
+  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals">("dashboard")
+  const [clientsList, setClientsList] = useState<any[]>([])
+  const [referralsList, setReferralsList] = useState<any[]>([])
+  const [docViewsList, setDocViewsList] = useState<any[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [search, setSearch] = useState("")
 
@@ -327,6 +330,15 @@ export default function CRMPage() {
   useEffect(() => {
     if (view === "projects" && user?.role === "admin") {
       loadProjects()
+    }
+    if (view === "clients" && user?.role === "admin") {
+      fetch("/api/crm/clients").then(r => r.json()).then(d => { if (d.clients) setClientsList(d.clients) })
+    }
+    if (view === "referrals" && user?.role === "admin") {
+      fetch("/api/crm/referrals").then(r => r.json()).then(d => {
+        if (d.referrals) setReferralsList(d.referrals)
+        if (d.docViews) setDocViewsList(d.docViews)
+      })
     }
   }, [view])
 
@@ -732,6 +744,8 @@ export default function CRMPage() {
             { id: "pipeline", label: "Pipeline", icon: Layers },
             { id: "reports", label: "Reports", icon: BarChart3 },
             { id: "data", label: "Data", icon: Database, count: dataRecords.length },
+            ...(user?.role === "admin" ? [{ id: "clients", label: "Clients", icon: User }] : []),
+            ...(user?.role === "admin" ? [{ id: "referrals", label: "Referrals", icon: Activity }] : []),
             ...(user?.role === "admin" ? [{ id: "projects", label: "Projects", icon: Building2, count: crmProjects.filter((p: any) => p.isActive).length }] : []),
             ...(user?.role === "admin" ? [{ id: "blog", label: "Blog", icon: BookOpen }] : []),
             { id: "map", label: "Map", icon: MapPin },
@@ -892,6 +906,122 @@ export default function CRMPage() {
               onConvert={convertToLead}
               savingData={savingData}
             />
+          )}
+
+          {/* ── CLIENTS VIEW ── */}
+          {view === "clients" && user?.role === "admin" && (
+            <div className="p-6 space-y-4">
+              <h2 className="text-xl font-bold text-gray-900">Registered Clients</h2>
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Name</th>
+                      <th className="px-4 py-3 text-left">Email</th>
+                      <th className="px-4 py-3 text-left">Phone</th>
+                      <th className="px-4 py-3 text-left">Verified</th>
+                      <th className="px-4 py-3 text-left">Enquiries</th>
+                      <th className="px-4 py-3 text-left">Joined</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {clientsList.length === 0 && (
+                      <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No clients yet</td></tr>
+                    )}
+                    {clientsList.map((c: any) => (
+                      <tr key={c.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-800">{c.name || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{c.email || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{c.phone || '—'}</td>
+                        <td className="px-4 py-3">
+                          {c.phone_verified
+                            ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✓ Verified</span>
+                            : <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Unverified</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{c.enquiry_count ?? 0}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs">{new Date(c.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── REFERRALS VIEW ── */}
+          {view === "referrals" && user?.role === "admin" && (
+            <div className="p-6 space-y-6">
+              <h2 className="text-xl font-bold text-gray-900">Referral Intelligence</h2>
+
+              <div>
+                <h3 className="font-semibold text-gray-800 mb-3">Share Links</h3>
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Code</th>
+                        <th className="px-4 py-3 text-left">Project</th>
+                        <th className="px-4 py-3 text-left">Sharer</th>
+                        <th className="px-4 py-3 text-left">Type</th>
+                        <th className="px-4 py-3 text-left">Clicks</th>
+                        <th className="px-4 py-3 text-left">Leads</th>
+                        <th className="px-4 py-3 text-left">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {referralsList.length === 0 && (
+                        <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No share links yet</td></tr>
+                      )}
+                      {referralsList.map((r: any) => (
+                        <tr key={r.code} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-mono text-xs text-gray-700">{r.code}</td>
+                          <td className="px-4 py-3 text-gray-600">{r.project_slug}</td>
+                          <td className="px-4 py-3 font-medium text-gray-800">{r.sharer_name || '—'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${r.sharer_type === 'affiliate' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {r.sharer_type}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{r.clicks}</td>
+                          <td className="px-4 py-3 text-gray-600">{r.leads_count}</td>
+                          <td className="px-4 py-3 text-gray-400 text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {docViewsList.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-gray-800 mb-3">Recent Document Views</h3>
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Client</th>
+                          <th className="px-4 py-3 text-left">Project</th>
+                          <th className="px-4 py-3 text-left">Doc Type</th>
+                          <th className="px-4 py-3 text-left">Viewed At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {docViewsList.map((v: any, i: number) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-800">{v.client_name || '—'}</td>
+                            <td className="px-4 py-3 text-gray-600">{v.project_slug}</td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{v.doc_type}</span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 text-xs">{new Date(v.viewed_at).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {view === "map" && (
             <div className="flex-1 h-full overflow-hidden" style={{ height: "100%" }}>

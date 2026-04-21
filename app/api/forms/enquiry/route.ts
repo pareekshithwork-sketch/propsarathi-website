@@ -9,7 +9,7 @@ import { getAutoAssignRM } from '@/lib/leadAssignment'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, phone, email, message, propertySlug, source } = body
+    const { name, phone, email, message, propertySlug, source, shareCode, rmOverride } = body
 
     if (!name || !phone) {
       return NextResponse.json({ error: 'Name and phone are required' }, { status: 400 })
@@ -20,10 +20,31 @@ export async function POST(req: NextRequest) {
     const leadSource = source || (propertySlug ? 'Property Enquiry' : 'Website')
     const notes = [
       propertySlug ? `Property: ${propertySlug}` : '',
+      shareCode ? `Referred via: ${shareCode}` : '',
       message || '',
     ].filter(Boolean).join('. ')
 
-    // Auto-assign to RM with fewest open leads
+    // Resolve referral info
+    let referrerType: string | null = null
+    let referrerId: number | null = null
+    let resolvedRmId: number | null = rmOverride ?? null
+
+    if (shareCode) {
+      try {
+        const [link] = await sql`
+          SELECT sharer_type, sharer_id, rm_id FROM share_links WHERE code = ${shareCode} LIMIT 1
+        `
+        if (link) {
+          referrerType = link.sharer_type
+          referrerId = link.sharer_id
+          if (!resolvedRmId && link.rm_id) resolvedRmId = link.rm_id
+          // Increment leads_count
+          await sql`UPDATE share_links SET leads_count = leads_count + 1 WHERE code = ${shareCode}`
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    // Auto-assign to RM with fewest open leads (unless overridden by referral chain)
     const assignedRM = await getAutoAssignRM()
 
     // Write to Google Sheets Leads tab
@@ -33,17 +54,41 @@ export async function POST(req: NextRequest) {
     ]])
 
     // Write to CRM DB leads table
+    let newLeadId: number | null = null
     try {
-      await sql`
+      const [inserted] = await sql`
         INSERT INTO crm_leads (
-          lead_id, source, client_name, phone, email, notes, last_note, status, assigned_rm, created_at, last_updated
+          lead_id, source, client_name, phone, email, notes, last_note, status, assigned_rm,
+          project, share_code, referrer_type, referrer_id, rm_override, created_at, last_updated
         ) VALUES (
           ${leadId}, ${leadSource}, ${name}, ${phone}, ${email || ''},
-          ${notes}, ${notes}, 'New', ${assignedRM}, NOW(), NOW()
+          ${notes}, ${notes}, 'New', ${assignedRM},
+          ${propertySlug || ''}, ${shareCode || null}, ${referrerType}, ${referrerId}, ${resolvedRmId},
+          NOW(), NOW()
         )
+        RETURNING id
       `
+      newLeadId = inserted?.id ?? null
     } catch (dbErr) {
       console.error('[Enquiry] DB insert failed (non-fatal):', dbErr)
+    }
+
+    // Record referral chain
+    if (newLeadId && shareCode && referrerType) {
+      try {
+        await sql`
+          INSERT INTO referral_chain (lead_id, share_code, sharer_type, sharer_id, rm_id)
+          VALUES (${newLeadId}, ${shareCode}, ${referrerType}, ${referrerId}, ${resolvedRmId})
+        `
+        // If affiliate referral, create commission record
+        if (referrerType === 'affiliate' && referrerId) {
+          await sql`
+            INSERT INTO affiliate_commissions (affiliate_id, lead_id, status, created_at)
+            VALUES (${referrerId}, ${newLeadId}, 'pending', NOW())
+            ON CONFLICT DO NOTHING
+          `
+        }
+      } catch { /* non-fatal */ }
     }
 
     // If user is logged in, also log to client_enquiries
@@ -51,8 +96,8 @@ export async function POST(req: NextRequest) {
       const session = await getClientSession()
       if (session) {
         await sql`
-          INSERT INTO client_enquiries (client_id, property_slug, message, status)
-          VALUES (${session.clientId}, ${propertySlug || ''}, ${message || ''}, 'Pending')
+          INSERT INTO client_enquiries (client_id, property_slug, message, status, share_code, referrer_id)
+          VALUES (${session.clientId}, ${propertySlug || ''}, ${message || ''}, 'Pending', ${shareCode || null}, ${referrerId})
         `
       }
     } catch {}
