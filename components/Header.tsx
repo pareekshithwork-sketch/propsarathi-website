@@ -93,7 +93,7 @@ const Header: React.FC = () => {
                 {clientName}
               </Link>
             ) : (
-              <Link href="/client/login" className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[#422D83] transition-colors px-3 py-2">
+              <Link href={`/client/login?redirect=${encodeURIComponent(pathname)}`} className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[#422D83] transition-colors px-3 py-2">
                 <User size={15} />
                 My Account
               </Link>
@@ -141,7 +141,7 @@ const Header: React.FC = () => {
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-secondary/20 absolute top-full left-0 right-0 p-6 shadow-lg">
           <NavLinks className="flex flex-col space-y-4" />
-          <Link href={clientName ? '/client' : '/client/login'} onClick={() => setMobileMenuOpen(false)}
+          <Link href={clientName ? '/client' : `/client/login?redirect=${encodeURIComponent(pathname)}`} onClick={() => setMobileMenuOpen(false)}
             className="flex items-center gap-2 text-foreground hover:text-secondary transition-colors duration-300 font-medium"
           >
             <User size={16} />

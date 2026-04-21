@@ -114,6 +114,18 @@ export async function updateProject(id: number, data: any) {
   if (data.seoTitle !== undefined) await sql`UPDATE projects SET seo_title = ${data.seoTitle} WHERE id = ${id}`
   if (data.seoDescription !== undefined) await sql`UPDATE projects SET seo_description = ${data.seoDescription} WHERE id = ${id}`
   if (data.paymentPlan !== undefined) await sql`UPDATE projects SET payment_plan = ${data.paymentPlan} WHERE id = ${id}`
+  if (data.paymentPlanBooking !== undefined) await sql`UPDATE projects SET payment_plan_booking = ${data.paymentPlanBooking} WHERE id = ${id}`
+  if (data.paymentPlanConstruction !== undefined) await sql`UPDATE projects SET payment_plan_construction = ${data.paymentPlanConstruction} WHERE id = ${id}`
+  if (data.paymentPlanPossession !== undefined) await sql`UPDATE projects SET payment_plan_possession = ${data.paymentPlanPossession} WHERE id = ${id}`
+  if (data.paymentPlanNote !== undefined) await sql`UPDATE projects SET payment_plan_note = ${data.paymentPlanNote} WHERE id = ${id}`
+  if (data.paymentPlanEmi !== undefined) await sql`UPDATE projects SET payment_plan_emi = ${data.paymentPlanEmi} WHERE id = ${id}`
+  if (data.floorPlans !== undefined) await sql`UPDATE projects SET floor_plans = ${data.floorPlans} WHERE id = ${id}`
+  if (data.developerDescription !== undefined) await sql`UPDATE projects SET developer_description = ${data.developerDescription} WHERE id = ${id}`
+  if (data.developerLogo !== undefined) await sql`UPDATE projects SET developer_logo = ${data.developerLogo} WHERE id = ${id}`
+  if (data.developerFounded !== undefined) await sql`UPDATE projects SET developer_founded = ${data.developerFounded} WHERE id = ${id}`
+  if (data.developerProjectsCount !== undefined) await sql`UPDATE projects SET developer_projects_count = ${data.developerProjectsCount} WHERE id = ${id}`
+  if (data.developerWebsite !== undefined) await sql`UPDATE projects SET developer_website = ${data.developerWebsite} WHERE id = ${id}`
+  if (data.nearbyLocations !== undefined) await sql`UPDATE projects SET nearby_locations = ${data.nearbyLocations} WHERE id = ${id}`
 }
 
 export async function deleteProject(id: number) {
@@ -159,6 +171,22 @@ function rowToProject(row: any) {
     seoTitle: row.seo_title || '',
     seoDescription: row.seo_description || '',
     paymentPlan: row.payment_plan || '',
+    // Payment plan structured
+    paymentPlanBooking: row.payment_plan_booking ?? null,
+    paymentPlanConstruction: row.payment_plan_construction ?? null,
+    paymentPlanPossession: row.payment_plan_possession ?? null,
+    paymentPlanNote: row.payment_plan_note || '',
+    paymentPlanEmi: row.payment_plan_emi || false,
+    // Floor plans (JSON string)
+    floorPlans: row.floor_plans || '',
+    // Developer info
+    developerDescription: row.developer_description || '',
+    developerLogo: row.developer_logo || '',
+    developerFounded: row.developer_founded || '',
+    developerProjectsCount: row.developer_projects_count ?? null,
+    developerWebsite: row.developer_website || '',
+    // Nearby locations (JSON string)
+    nearbyLocations: row.nearby_locations || '',
   }
 }
 

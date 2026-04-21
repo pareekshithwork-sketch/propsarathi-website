@@ -2361,6 +2361,14 @@ const EMPTY_PROJECT_FORM = {
   status: 'Pre-Launch', currency: 'INR', minPrice: '', maxPrice: '',
   coverImage: '', description: '', highlights: '', amenities: '',
   possessionDate: '', reraNumber: '', numUnits: '', isFeatured: false, isActive: true,
+  // Payment plan
+  paymentPlanBooking: '', paymentPlanConstruction: '', paymentPlanPossession: '',
+  paymentPlanNote: '', paymentPlanEmi: false,
+  // Developer info
+  developerDescription: '', developerLogo: '', developerFounded: '',
+  developerProjectsCount: '', developerWebsite: '',
+  // Content (JSON)
+  floorPlans: '', nearbyLocations: '',
 }
 
 const PROJECT_STATUS_OPTIONS = ['Pre-Launch', 'Just Launched', 'Under Construction', 'Ready to Move']
@@ -2392,6 +2400,21 @@ function ProjectsView({ projects, loading, onRefresh, onUpdate, onDelete, onCrea
       highlights: p.highlights || '', amenities: p.amenities || '',
       possessionDate: p.possessionDate || '', reraNumber: p.reraNumber || '',
       numUnits: p.numUnits || '', isFeatured: p.isFeatured || false, isActive: p.isActive !== false,
+      // Payment plan
+      paymentPlanBooking: p.paymentPlanBooking ?? '',
+      paymentPlanConstruction: p.paymentPlanConstruction ?? '',
+      paymentPlanPossession: p.paymentPlanPossession ?? '',
+      paymentPlanNote: p.paymentPlanNote || '',
+      paymentPlanEmi: p.paymentPlanEmi || false,
+      // Developer info
+      developerDescription: p.developerDescription || '',
+      developerLogo: p.developerLogo || '',
+      developerFounded: p.developerFounded || '',
+      developerProjectsCount: p.developerProjectsCount ?? '',
+      developerWebsite: p.developerWebsite || '',
+      // Content (JSON)
+      floorPlans: p.floorPlans || '',
+      nearbyLocations: p.nearbyLocations || '',
     })
     setEditingProject(p)
     setShowForm(true)
@@ -2405,6 +2428,10 @@ function ProjectsView({ projects, loading, onRefresh, onUpdate, onDelete, onCrea
       minPrice: form.minPrice ? Number(form.minPrice) : null,
       maxPrice: form.maxPrice ? Number(form.maxPrice) : null,
       numUnits: form.numUnits ? Number(form.numUnits) : null,
+      paymentPlanBooking: form.paymentPlanBooking !== '' ? Number(form.paymentPlanBooking) : null,
+      paymentPlanConstruction: form.paymentPlanConstruction !== '' ? Number(form.paymentPlanConstruction) : null,
+      paymentPlanPossession: form.paymentPlanPossession !== '' ? Number(form.paymentPlanPossession) : null,
+      developerProjectsCount: form.developerProjectsCount !== '' ? Number(form.developerProjectsCount) : null,
     }
     try {
       if (editingProject) {
@@ -2662,6 +2689,90 @@ function ProjectsView({ projects, loading, onRefresh, onUpdate, onDelete, onCrea
                     <span className="text-sm text-gray-700">Live on website</span>
                   </label>
                 </div>
+
+                {/* ── PAYMENT PLAN ── */}
+                <div className="col-span-2 pt-2 border-t border-gray-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">💰 Payment Plan</p>
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 block mb-1">Booking %</label>
+                      <input type="number" min="0" max="100" value={form.paymentPlanBooking}
+                        onChange={e => setForm((f: any) => ({ ...f, paymentPlanBooking: e.target.value }))}
+                        placeholder="e.g. 20" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 block mb-1">Construction %</label>
+                      <input type="number" min="0" max="100" value={form.paymentPlanConstruction}
+                        onChange={e => setForm((f: any) => ({ ...f, paymentPlanConstruction: e.target.value }))}
+                        placeholder="e.g. 60" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 block mb-1">Possession %</label>
+                      <input type="number" min="0" max="100" value={form.paymentPlanPossession}
+                        onChange={e => setForm((f: any) => ({ ...f, paymentPlanPossession: e.target.value }))}
+                        placeholder="e.g. 20" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30" />
+                    </div>
+                  </div>
+                  <input value={form.paymentPlanNote}
+                    onChange={e => setForm((f: any) => ({ ...f, paymentPlanNote: e.target.value }))}
+                    placeholder="Payment plan note (optional)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 mb-2" />
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={form.paymentPlanEmi} onChange={e => setForm((f: any) => ({ ...f, paymentPlanEmi: e.target.checked }))} className="w-4 h-4 accent-[#422D83]" />
+                    <span className="text-sm text-gray-700">EMI Available</span>
+                  </label>
+                </div>
+
+                {/* ── DEVELOPER INFO ── */}
+                <div className="col-span-2 pt-2 border-t border-gray-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">🏢 Developer Info</p>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 block mb-1">Founded Year</label>
+                      <input value={form.developerFounded}
+                        onChange={e => setForm((f: any) => ({ ...f, developerFounded: e.target.value }))}
+                        placeholder="e.g. 1995" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600 block mb-1">Projects Delivered</label>
+                      <input type="number" value={form.developerProjectsCount}
+                        onChange={e => setForm((f: any) => ({ ...f, developerProjectsCount: e.target.value }))}
+                        placeholder="e.g. 45" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30" />
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <input value={form.developerLogo}
+                      onChange={e => setForm((f: any) => ({ ...f, developerLogo: e.target.value }))}
+                      placeholder="Developer Logo URL (https://...)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30" />
+                    <input value={form.developerWebsite}
+                      onChange={e => setForm((f: any) => ({ ...f, developerWebsite: e.target.value }))}
+                      placeholder="Developer Website (https://...)" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30" />
+                    <textarea value={form.developerDescription}
+                      onChange={e => setForm((f: any) => ({ ...f, developerDescription: e.target.value }))}
+                      rows={3} placeholder="Brief description of the developer..."
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 resize-none" />
+                  </div>
+                </div>
+
+                {/* ── FLOOR PLANS (JSON) ── */}
+                <div className="col-span-2 pt-2 border-t border-gray-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">📐 Floor Plans <span className="font-normal normal-case text-gray-400">(JSON array)</span></p>
+                  <p className="text-xs text-gray-400 mb-2">Format: {`[{"name":"2BHK Type A","bedrooms":2,"size_sqft":1250,"price_from":8500000,"image_url":"https://..."}]`}</p>
+                  <textarea value={form.floorPlans}
+                    onChange={e => setForm((f: any) => ({ ...f, floorPlans: e.target.value }))}
+                    rows={3} placeholder='[{"name":"2BHK","bedrooms":2,"size_sqft":1200,"price_from":8000000}]'
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 resize-none" />
+                </div>
+
+                {/* ── NEARBY LOCATIONS (JSON) ── */}
+                <div className="col-span-2 pt-2 border-t border-gray-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">📍 Nearby Locations <span className="font-normal normal-case text-gray-400">(JSON array)</span></p>
+                  <p className="text-xs text-gray-400 mb-2">Categories: Airport | Metro | School | Hospital | Mall | IT Park | Beach | Park. Format: {`[{"name":"Kempegowda Airport","distance_km":8,"category":"Airport","travel_mins":15}]`}</p>
+                  <textarea value={form.nearbyLocations}
+                    onChange={e => setForm((f: any) => ({ ...f, nearbyLocations: e.target.value }))}
+                    rows={3} placeholder='[{"name":"Metro Station","distance_km":1.2,"category":"Metro","travel_mins":5}]'
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 resize-none" />
+                </div>
+
               </div>
             </div>
             <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
