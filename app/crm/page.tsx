@@ -71,6 +71,11 @@ export default function CRMPage() {
   const [leadForm, setLeadForm] = useState<Partial<Lead>>(EMPTY_LEAD_FORM)
   const [savingLead, setSavingLead] = useState(false)
 
+  // ── v2 leads ──
+  const [v2Leads, setV2Leads] = useState<any[]>([])
+  const [useV2, setUseV2] = useState(false)
+  const [showAddLeadV2, setShowAddLeadV2] = useState(false)
+
   // ── Data section ──
   const [selectedData, setSelectedData] = useState<DataRecord | null>(null)
   const [showAddData, setShowAddData] = useState(false)
@@ -104,6 +109,7 @@ export default function CRMPage() {
   useEffect(() => {
     if (authState === "crm") {
       loadAll()
+      loadV2Leads()
     }
   }, [authState])
 
@@ -139,6 +145,16 @@ export default function CRMPage() {
       console.error(e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadV2Leads() {
+    try {
+      const res = await fetch('/api/crm/v2/leads?limit=100')
+      const data = await res.json()
+      if (data.leads) setV2Leads(data.leads)
+    } catch (e) {
+      console.error('v2 leads error', e)
     }
   }
 
@@ -599,7 +615,11 @@ export default function CRMPage() {
               />
             </div>
             <button
-              onClick={() => view === "data" ? setShowAddData(true) : openAddLead()}
+              onClick={() => {
+                if (view === "data") setShowAddData(true)
+                else if (view === "leads" && useV2) setShowAddLeadV2(true)
+                else openAddLead()
+              }}
               className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -649,6 +669,12 @@ export default function CRMPage() {
               onSaveNote={saveNote}
               onAddLead={openAddLead}
               user={user}
+              useV2={useV2}
+              setUseV2={setUseV2}
+              v2Leads={v2Leads}
+              showAddLeadV2={showAddLeadV2}
+              setShowAddLeadV2={setShowAddLeadV2}
+              onV2LeadsReload={loadV2Leads}
             />
           )}
           {view === "pipeline" && (

@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       referralName = '', referralPhone = '',
       customerLocation = '', assignedRm = '',
       leadType = 'Buyer', tags = '',
+      forceInsert = false,
     } = body
 
     if (!name || !phone) {
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
         AND is_deleted = FALSE
       LIMIT 1
     `
-    if (existing.length > 0) {
+    if (existing.length > 0 && !forceInsert) {
       return NextResponse.json({ duplicate: true, existingLead: existing[0] })
     }
 
