@@ -21,6 +21,7 @@ import { ReportsView } from './components/ReportsView'
 import { DataView } from './components/DataView'
 import { ProjectsView } from './components/ProjectsView'
 import { BlogView } from './components/BlogView'
+import { TeamView } from './components/TeamView'
 
 // ─── Main CRM Page ────────────────────────────────────────────────────────────
 
@@ -34,7 +35,7 @@ export default function CRMPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   // ── View ──
-  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals">("dashboard")
+  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team">("dashboard")
   const [clientsList, setClientsList] = useState<any[]>([])
   const [referralsList, setReferralsList] = useState<any[]>([])
   const [docViewsList, setDocViewsList] = useState<any[]>([])
@@ -534,6 +535,7 @@ export default function CRMPage() {
             ...(user?.role === "admin" ? [{ id: "referrals", label: "Referrals", icon: Activity }] : []),
             ...(user?.role === "admin" ? [{ id: "projects", label: "Projects", icon: Building2, count: crmProjects.filter((p: any) => p.isActive).length }] : []),
             ...(user?.role === "admin" ? [{ id: "blog", label: "Blog", icon: BookOpen }] : []),
+            ...(user?.role === "admin" ? [{ id: "team", label: "Team", icon: Users }] : []),
             { id: "map", label: "Map", icon: MapPin },
           ].map(item => (
             <button
@@ -652,6 +654,9 @@ export default function CRMPage() {
           )}
           {view === "blog" && user?.role === "admin" && (
             <BlogView />
+          )}
+          {view === "team" && user?.role === "admin" && (
+            <TeamView user={user} />
           )}
           {view === "data" && (
             <DataView

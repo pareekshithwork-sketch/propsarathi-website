@@ -35,6 +35,12 @@ export async function GET(request: NextRequest) {
         (SELECT e2.enquiry_id FROM crm_enquiries e2
          WHERE e2.lead_id = l.lead_id AND e2.status = 'active'
          ORDER BY e2.updated_at DESC LIMIT 1) AS latest_enquiry_id,
+        (SELECT e2.sub_stage FROM crm_enquiries e2
+         WHERE e2.lead_id = l.lead_id AND e2.status = 'active'
+         ORDER BY e2.updated_at DESC LIMIT 1) AS latest_enquiry_sub_stage,
+        (SELECT e2.scheduled_at FROM crm_enquiries e2
+         WHERE e2.lead_id = l.lead_id AND e2.status = 'active'
+         ORDER BY e2.updated_at DESC LIMIT 1) AS latest_scheduled_at,
         (SELECT a.description FROM crm_activity_log a
          WHERE a.lead_id = l.lead_id AND a.activity_type = 'note_added'
          ORDER BY a.created_at DESC LIMIT 1) AS last_note

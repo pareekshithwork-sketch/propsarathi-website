@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
   X, Check, Loader2, MoreHorizontal, Trash2, Calendar, FileText,
-  Activity, TrendingUp, Building2,
+  Activity, TrendingUp, Building2, Filter, Pencil,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -97,6 +97,15 @@ const TAG_OPTIONS_V2 = ['Hot', 'Warm', 'Cold', 'Escalated', 'Highlighted']
 const BEDROOM_OPTIONS = ['Any', '1', '2', '3', '4+']
 const LEAD_TYPES = ['Buyer', 'Seller', 'Both']
 
+type FilterState = {
+  sources: string[]
+  leadType: string
+  assignedTo: string
+  tags: string[]
+}
+
+const EMPTY_FILTERS: FilterState = { sources: [], leadType: '', assignedTo: '', tags: [] }
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getInitials(name: string): string {
@@ -149,6 +158,19 @@ export function LeadsView({ v2Leads, user, onReload }: {
   // ── List filters ──
   const [stageTab, setStageTab] = useState('All')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [dateSort, setDateSort] = useState('modified')
+  const [showFilters, setShowFilters] = useState(false)
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS)
+  const [pendingFilters, setPendingFilters] = useState<FilterState>(EMPTY_FILTERS)
+
+  // ── Bulk selection ──
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+
+  // ── RMs ──
+  const [rms, setRms] = useState<any[]>([])
 
   // ── Panel ──
   const [selectedLead, setSelectedLead] = useState<any>(null)
@@ -184,10 +206,35 @@ export function LeadsView({ v2Leads, user, onReload }: {
   })
   const [savingEnquiry, setSavingEnquiry] = useState(false)
 
+  // ── Debounce search ──
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // ── Load RMs ──
+  useEffect(() => {
+    fetch('/api/crm/v2/users')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.users) setRms(d.users) })
+      .catch(() => {})
+  }, [])
+
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
   }
+
+  function openFilters() {
+    setPendingFilters({ ...filters })
+    setShowFilters(true)
+  }
+
+  const activeFilterCount =
+    (filters.sources.length > 0 ? 1 : 0) +
+    (filters.leadType ? 1 : 0) +
+    (filters.assignedTo ? 1 : 0) +
+    (filters.tags.length > 0 ? 1 : 0)
 
   const filteredLeads = useMemo(() => {
     const active = (v2Leads || []).filter((l: any) => !l.is_deleted)
@@ -201,8 +248,8 @@ export function LeadsView({ v2Leads, user, onReload }: {
       })
     }
 
-    if (search.trim()) {
-      const q = search.toLowerCase()
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase()
       result = result.filter((l: any) =>
         l.name?.toLowerCase().includes(q) ||
         l.phone?.includes(q) ||
@@ -210,8 +257,60 @@ export function LeadsView({ v2Leads, user, onReload }: {
       )
     }
 
-    return result
-  }, [v2Leads, stageTab, search])
+    if (filters.sources.length > 0) {
+      result = result.filter((l: any) => filters.sources.includes(l.source))
+    }
+    if (filters.leadType) {
+      result = result.filter((l: any) => l.lead_type === filters.leadType)
+    }
+    if (filters.assignedTo) {
+      result = result.filter((l: any) => l.assigned_rm === filters.assignedTo)
+    }
+    if (filters.tags.length > 0) {
+      result = result.filter((l: any) => {
+        const leadTags = (l.tags || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+        return filters.tags.some((t: string) => leadTags.includes(t))
+      })
+    }
+
+    return [...result].sort((a, b) => {
+      if (dateSort === 'created') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      if (dateSort === 'scheduled') {
+        const aT = a.latest_scheduled_at ? new Date(a.latest_scheduled_at).getTime() : 0
+        const bT = b.latest_scheduled_at ? new Date(b.latest_scheduled_at).getTime() : 0
+        return bT - aT
+      }
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    })
+  }, [v2Leads, stageTab, debouncedSearch, filters, dateSort])
+
+  const allSelected = filteredLeads.length > 0 && filteredLeads.every((l: any) => selectedLeadIds.has(l.lead_id))
+  const someSelected = filteredLeads.some((l: any) => selectedLeadIds.has(l.lead_id))
+
+  async function handleBulkAction(action: 'stage' | 'reassign' | 'delete', value: string) {
+    if (!value) return
+    const leadIds = Array.from(selectedLeadIds)
+    setBulkLoading(true)
+    try {
+      const res = await fetch('/api/crm/v2/leads/bulk', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadIds, action, value }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSelectedLeadIds(new Set())
+        showToast(`${data.updated} lead${data.updated !== 1 ? 's' : ''} updated`)
+        onReload()
+      } else {
+        showToast(data.error || 'Bulk action failed')
+      }
+    } catch {
+      showToast('Error performing bulk action')
+    }
+    setBulkLoading(false)
+    setShowBulkDeleteConfirm(false)
+  }
 
   async function loadDetail(leadId: string) {
     setDetailLoading(true)
@@ -370,10 +469,10 @@ export function LeadsView({ v2Leads, user, onReload }: {
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Lead list (full width or 55%) ── */}
+      {/* ── Lead list ── */}
       <div className={`${selectedLead ? 'w-[55%]' : 'flex-1'} flex flex-col border-r border-gray-200 bg-white overflow-hidden transition-all duration-200`}>
 
-        {/* Top bar: stage tabs + search + Add Lead + Refresh */}
+        {/* Top bar */}
         <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-shrink-0">
           <div className="flex gap-1 overflow-x-auto flex-1 scrollbar-hide">
             {STAGE_TABS.map(tab => (
@@ -381,7 +480,9 @@ export function LeadsView({ v2Leads, user, onReload }: {
                 key={tab.id}
                 onClick={() => setStageTab(tab.id)}
                 className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0 font-medium transition-colors ${
-                  stageTab === tab.id ? 'bg-[#422D83] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  stageTab === tab.id
+                    ? 'bg-[#422D83] text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:border-[#422D83]'
                 }`}
               >
                 {tab.label}
@@ -395,9 +496,34 @@ export function LeadsView({ v2Leads, user, onReload }: {
               placeholder="Search…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 w-40"
+              className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 w-36"
             />
           </div>
+          <select
+            value={dateSort}
+            onChange={e => setDateSort(e.target.value)}
+            className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-white text-gray-600 flex-shrink-0"
+          >
+            <option value="modified">Modified</option>
+            <option value="created">Created</option>
+            <option value="scheduled">Scheduled</option>
+          </select>
+          <button
+            onClick={() => showFilters ? setShowFilters(false) : openFilters()}
+            className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors ${
+              showFilters || activeFilterCount > 0
+                ? 'bg-[#422D83] text-white border-[#422D83]'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-[#422D83]'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="bg-orange-500 text-white text-[10px] min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
           <button
             onClick={() => setShowAddLead(true)}
             className="flex-shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -409,9 +535,109 @@ export function LeadsView({ v2Leads, user, onReload }: {
           </button>
         </div>
 
+        {/* Filters panel */}
+        {showFilters && (
+          <div className="border-b border-gray-200 px-3 py-3 bg-gray-50 flex-shrink-0 space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Source</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                  {['Direct', 'Website', 'Referral', 'Facebook', 'Instagram', 'Google', 'WhatsApp', 'Affiliate'].map(s => (
+                    <label key={s} className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={pendingFilters.sources.includes(s)}
+                        onChange={e => setPendingFilters(p => ({
+                          ...p,
+                          sources: e.target.checked ? [...p.sources, s] : p.sources.filter(x => x !== s),
+                        }))}
+                        className="rounded"
+                      />
+                      <span className="text-xs text-gray-600">{s}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Lead Type</p>
+                  <div className="flex gap-1.5">
+                    {['Buyer', 'Seller', 'Both'].map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setPendingFilters(p => ({ ...p, leadType: p.leadType === t ? '' : t }))}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          pendingFilters.leadType === t
+                            ? 'bg-[#422D83] text-white border-[#422D83]'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-[#422D83]'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Assigned To</p>
+                  <select
+                    value={pendingFilters.assignedTo}
+                    onChange={e => setPendingFilters(p => ({ ...p, assignedTo: e.target.value }))}
+                    className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none w-full bg-white"
+                  >
+                    <option value="">All RMs</option>
+                    {rms.map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Tags</p>
+                  <div className="flex gap-1.5">
+                    {['Hot', 'Warm', 'Cold', 'Escalated'].map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => setPendingFilters(p => ({
+                          ...p,
+                          tags: p.tags.includes(tag) ? p.tags.filter(t => t !== tag) : [...p.tags, tag],
+                        }))}
+                        className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          pendingFilters.tags.includes(tag)
+                            ? TAG_PILL_COLORS[tag] || 'bg-gray-100 text-gray-700 border-gray-300'
+                            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setPendingFilters(EMPTY_FILTERS)
+                  setFilters(EMPTY_FILTERS)
+                  setShowFilters(false)
+                }}
+                className="text-xs px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                Clear Filters
+              </button>
+              <button
+                onClick={() => { setFilters({ ...pendingFilters }); setShowFilters(false) }}
+                className="text-xs px-3 py-1.5 bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b]"
+              >
+                Apply Filters
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Lead count */}
         <div className="px-4 py-1 text-xs text-gray-400 border-b border-gray-50 flex-shrink-0">
-          {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
+          {filteredLeads.length} result{filteredLeads.length !== 1 ? 's' : ''}
+          {activeFilterCount > 0 && (
+            <span className="ml-1 text-[#422D83]">· {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active</span>
+          )}
         </div>
 
         {/* Table */}
@@ -422,20 +648,28 @@ export function LeadsView({ v2Leads, user, onReload }: {
               <p className="text-sm">No leads found</p>
             </div>
           ) : (
-            <table className="w-full text-sm min-w-[720px]">
-              <thead className="bg-gray-800 text-gray-200 sticky top-0 z-10">
-                <tr className="text-xs uppercase tracking-wide">
-                  <th className="px-3 py-2.5 w-8 font-medium text-left">
-                    <input type="checkbox" className="rounded opacity-40" />
+            <table className="w-full text-sm min-w-[700px]">
+              <thead className="bg-gray-900 text-white sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-3 w-8 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected }}
+                      onChange={e => {
+                        if (e.target.checked) setSelectedLeadIds(new Set(filteredLeads.map((l: any) => l.lead_id)))
+                        else setSelectedLeadIds(new Set())
+                      }}
+                      className="rounded opacity-70"
+                    />
                   </th>
-                  <th className="px-3 py-2.5 text-left font-medium">Lead Name</th>
-                  <th className="px-3 py-2.5 w-24 text-left font-medium">Modified</th>
-                  <th className="px-3 py-2.5 w-32 text-left font-medium">Phone</th>
-                  <th className="px-3 py-2.5 w-36 text-left font-medium">Notes</th>
-                  <th className="px-3 py-2.5 w-24 text-left font-medium">Assigned To</th>
-                  <th className="px-3 py-2.5 w-20 text-left font-medium">Source</th>
-                  <th className="px-3 py-2.5 w-32 text-left font-medium">Status</th>
-                  <th className="px-3 py-2.5 w-10" />
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead Name</th>
+                  <th className="px-3 py-3 w-28 text-left text-xs font-semibold uppercase tracking-wide">Modified</th>
+                  <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Phone</th>
+                  <th className="px-3 py-3 w-36 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
+                  <th className="px-3 py-3 w-20 text-left text-xs font-semibold uppercase tracking-wide">Source</th>
+                  <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
+                  <th className="px-3 py-3 w-14" />
                 </tr>
               </thead>
               <tbody>
@@ -451,16 +685,26 @@ export function LeadsView({ v2Leads, user, onReload }: {
                       onClick={() => selectLead(lead)}
                       className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
                     >
-                      <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" className="rounded" />
+                      <td className="px-3 py-4 w-8" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedLeadIds.has(lead.lead_id)}
+                          onChange={e => {
+                            const next = new Set(selectedLeadIds)
+                            if (e.target.checked) next.add(lead.lead_id)
+                            else next.delete(lead.lead_id)
+                            setSelectedLeadIds(next)
+                          }}
+                          className="rounded"
+                        />
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="px-3 py-4">
                         <div className="flex items-start gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-[#422D83]/10 text-[#422D83] text-xs font-bold flex items-center justify-center flex-shrink-0">
                             {getInitials(lead.name)}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{lead.name}</p>
+                            <p className="font-bold text-gray-900 text-sm leading-tight truncate">{lead.name}</p>
                             <p className="text-xs text-gray-400">{lead.lead_id}</p>
                             {tags.length > 0 && (
                               <div className="flex gap-1 mt-0.5">
@@ -472,10 +716,11 @@ export function LeadsView({ v2Leads, user, onReload }: {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3 w-24">
-                        <p className="text-xs text-gray-600">{formatDate(lead.updated_at)}</p>
+                      <td className="px-3 py-4 w-28">
+                        <p className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{lead.assigned_rm || 'Unassigned'}</p>
+                        <p className="text-xs text-gray-400">At {formatDate(lead.updated_at)}</p>
                       </td>
-                      <td className="px-3 py-3 w-32">
+                      <td className="px-3 py-4 w-32">
                         <div className="flex items-center gap-1.5">
                           <a href={`tel:${lead.country_code || '+91'}${lead.phone}`} onClick={e => e.stopPropagation()} className="text-gray-400 hover:text-blue-600" title="Call">
                             <Phone className="w-3.5 h-3.5" />
@@ -486,24 +731,33 @@ export function LeadsView({ v2Leads, user, onReload }: {
                           </a>
                         </div>
                       </td>
-                      <td className="px-3 py-3 w-36">
+                      <td className="px-3 py-4 w-36">
                         <p className="text-xs text-gray-500 truncate max-w-[128px]">{lead.last_note || '—'}</p>
                       </td>
-                      <td className="px-3 py-3 w-24">
-                        <p className="text-xs text-gray-600 truncate max-w-[88px]">{lead.assigned_rm || '—'}</p>
-                      </td>
-                      <td className="px-3 py-3 w-20">
+                      <td className="px-3 py-4 w-20">
                         <p className="text-xs text-gray-600 truncate max-w-[72px]">{lead.source || '—'}</p>
                       </td>
-                      <td className="px-3 py-3 w-32">
+                      <td className="px-3 py-4 w-32">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stageBadgeCls(lead.latest_enquiry_stage)}`}>
                           {stageDisplayLabel(lead.latest_enquiry_stage)}
                         </span>
+                        {lead.latest_enquiry_sub_stage && (
+                          <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[120px]">{lead.latest_enquiry_sub_stage}</p>
+                        )}
                       </td>
-                      <td className="px-3 py-3 w-10" onClick={e => e.stopPropagation()}>
-                        <button className="text-gray-300 hover:text-gray-600 p-1">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
+                      <td className="px-3 py-4 w-14" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            className="text-gray-300 hover:text-gray-600 p-1"
+                            title="Edit"
+                            onClick={() => selectLead(lead)}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button className="text-gray-300 hover:text-gray-600 p-1">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -525,35 +779,40 @@ export function LeadsView({ v2Leads, user, onReload }: {
                 <X className="w-4 h-4" />
               </button>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="font-bold text-gray-900 text-base leading-tight">{selectedLead.name}</h2>
-                  {(activeEnquiry?.stage) && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stageBadgeCls(activeEnquiry.stage)}`}>
-                      {stageDisplayLabel(activeEnquiry.stage)}
-                    </span>
-                  )}
-                </div>
+                <h2 className="font-bold text-gray-900 text-lg leading-tight">{selectedLead.name}</h2>
                 <p className="text-xs text-gray-400 mt-0.5">{selectedLead.lead_id} · {selectedLead.assigned_rm || 'Unassigned'}</p>
               </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <a href={`tel:${selectedLead.country_code || '+91'}${selectedLead.phone}`} className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg" title="Call">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <a
+                  href={`tel:${selectedLead.country_code || '+91'}${selectedLead.phone}`}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white"
+                  title="Call"
+                >
                   <Phone className="w-3.5 h-3.5" />
                 </a>
                 <a
                   href={`https://wa.me/${(selectedLead.country_code || '+91').replace('+', '')}${selectedLead.phone}?text=${encodeURIComponent(`Hi ${selectedLead.name}, this is ${user?.name || 'PropSarathi Team'} from PropSarathi.`)}`}
                   target="_blank" rel="noopener noreferrer"
-                  className="p-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-500 hover:bg-green-600 text-white"
                   title="WhatsApp"
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
                 </a>
                 {selectedLead.email && (
-                  <a href={`mailto:${selectedLead.email}`} className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg" title="Email">
+                  <a
+                    href={`mailto:${selectedLead.email}`}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white"
+                    title="Email"
+                  >
                     <Mail className="w-3.5 h-3.5" />
                   </a>
                 )}
                 {user?.role === 'admin' && (
-                  <button onClick={handleDelete} className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg" title="Delete">
+                  <button
+                    onClick={handleDelete}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500 hover:bg-red-600 text-white"
+                    title="Delete"
+                  >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -561,14 +820,16 @@ export function LeadsView({ v2Leads, user, onReload }: {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="border-b border-gray-100 flex overflow-x-auto flex-shrink-0 scrollbar-hide">
+          {/* Tabs — sticky */}
+          <div className="border-b border-gray-100 flex overflow-x-auto flex-shrink-0 scrollbar-hide sticky top-0 bg-white z-10">
             {(['overview', 'enquiries', 'status', 'history', 'notes', 'document'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setDetailTab(tab)}
-                className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors capitalize ${
-                  detailTab === tab ? 'border-[#422D83] text-[#422D83]' : 'border-transparent text-gray-500 hover:text-gray-700'
+                className={`px-4 py-2.5 text-xs whitespace-nowrap border-b-2 transition-colors capitalize ${
+                  detailTab === tab
+                    ? 'border-[#422D83] text-[#422D83] font-semibold'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'
                 }`}
               >
                 {tab}
@@ -647,6 +908,81 @@ export function LeadsView({ v2Leads, user, onReload }: {
             showToast(`Lead ${leadId} created`)
           }}
         />
+      )}
+
+      {/* Bulk action bar */}
+      {selectedLeadIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-gray-900 text-white px-6 py-3 flex items-center justify-between z-50 shadow-2xl">
+          <span className="text-sm font-semibold">
+            {selectedLeadIds.size} Lead{selectedLeadIds.size !== 1 ? 's' : ''} Selected
+          </span>
+          <div className="flex items-center gap-3">
+            {bulkLoading && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+            <select
+              defaultValue=""
+              onChange={e => { if (e.target.value) { handleBulkAction('stage', e.target.value); (e.target as HTMLSelectElement).value = '' } }}
+              disabled={bulkLoading}
+              className="bg-gray-800 border border-gray-600 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
+            >
+              <option value="" disabled>Bulk Update Status</option>
+              {STAGE_ACTIONS.map(a => <option key={a.apiStage} value={a.apiStage}>{a.label}</option>)}
+            </select>
+            <select
+              defaultValue=""
+              onChange={e => { if (e.target.value) { handleBulkAction('reassign', e.target.value); (e.target as HTMLSelectElement).value = '' } }}
+              disabled={bulkLoading}
+              className="bg-gray-800 border border-gray-600 text-white text-xs px-3 py-1.5 rounded-lg disabled:opacity-50"
+            >
+              <option value="" disabled>Reassign Leads</option>
+              {rms.map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}
+            </select>
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => setShowBulkDeleteConfirm(true)}
+                disabled={bulkLoading}
+                className="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50"
+              >
+                Delete Selected
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedLeadIds(new Set())}
+              className="text-gray-400 hover:text-white ml-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk delete confirmation modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70]">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4">
+            <h3 className="font-bold text-gray-900 mb-2">
+              Delete {selectedLeadIds.size} lead{selectedLeadIds.size !== 1 ? 's' : ''}?
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              This will soft-delete the selected leads. They can be recovered from the Deleted filter.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleBulkAction('delete', 'true')}
+                disabled={bulkLoading}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {bulkLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast */}
@@ -806,7 +1142,6 @@ function StatusTab({ activeEnquiry, activeStageAction, setActiveStageAction, sub
 
   return (
     <div className="p-4 space-y-4">
-      {/* Current status */}
       <div className="bg-gray-50 rounded-lg p-3">
         {activeEnquiry ? (
           <>
@@ -827,7 +1162,6 @@ function StatusTab({ activeEnquiry, activeStageAction, setActiveStageAction, sub
         )}
       </div>
 
-      {/* Stage action buttons */}
       <div>
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Move To</p>
         <div className="flex flex-wrap gap-2">
@@ -845,7 +1179,6 @@ function StatusTab({ activeEnquiry, activeStageAction, setActiveStageAction, sub
         </div>
       </div>
 
-      {/* Action form */}
       {activeStageAction && (
         <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
           <p className="text-xs font-semibold text-gray-700">
