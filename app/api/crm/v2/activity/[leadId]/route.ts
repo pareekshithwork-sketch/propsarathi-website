@@ -44,3 +44,29 @@ export async function GET(request: NextRequest, { params }: { params: { leadId: 
     return NextResponse.json({ success: false, error: e.message }, { status: 500 })
   }
 }
+
+export async function POST(request: NextRequest, { params }: { params: { leadId: string } }) {
+  const token = request.cookies.get('crm_token')?.value
+  const user = verifyCRMToken(token || '')
+  if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+
+  const { leadId } = params
+  try {
+    const body = await request.json()
+    const { note } = body
+    if (!note || !String(note).trim()) {
+      return NextResponse.json({ success: false, error: 'Note is required' }, { status: 400 })
+    }
+
+    await sql`
+      INSERT INTO crm_activity_log
+        (lead_id, activity_type, title, description, performed_by)
+      VALUES
+        (${leadId}, 'note_added', 'Note added', ${String(note).trim()}, ${user.name})
+    `
+
+    return NextResponse.json({ success: true })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+  }
+}

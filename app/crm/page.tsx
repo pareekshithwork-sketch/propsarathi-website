@@ -73,8 +73,6 @@ export default function CRMPage() {
 
   // ── v2 leads ──
   const [v2Leads, setV2Leads] = useState<any[]>([])
-  const [useV2, setUseV2] = useState(false)
-  const [showAddLeadV2, setShowAddLeadV2] = useState(false)
 
   // ── Data section ──
   const [selectedData, setSelectedData] = useState<DataRecord | null>(null)
@@ -109,7 +107,6 @@ export default function CRMPage() {
   useEffect(() => {
     if (authState === "crm") {
       loadAll()
-      loadV2Leads()
     }
   }, [authState])
 
@@ -132,29 +129,21 @@ export default function CRMPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [leadsRes, dataRes, statsRes] = await Promise.all([
+      const [leadsRes, dataRes, statsRes, v2Res] = await Promise.all([
         fetch("/api/crm/leads"),
         fetch("/api/crm/data"),
         fetch("/api/crm/stats"),
+        fetch("/api/crm/v2/leads?limit=200"),
       ])
-      const [ld, dd, sd] = await Promise.all([leadsRes.json(), dataRes.json(), statsRes.json()])
+      const [ld, dd, sd, v2d] = await Promise.all([leadsRes.json(), dataRes.json(), statsRes.json(), v2Res.json()])
       if (ld.success) setLeads(ld.leads || [])
       if (dd.success) setDataRecords(dd.records || [])
       if (sd.success) setStats(sd.stats)
+      if (v2d.leads) setV2Leads(v2d.leads)
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function loadV2Leads() {
-    try {
-      const res = await fetch('/api/crm/v2/leads?limit=100')
-      const data = await res.json()
-      if (data.leads) setV2Leads(data.leads)
-    } catch (e) {
-      console.error('v2 leads error', e)
     }
   }
 
@@ -537,7 +526,7 @@ export default function CRMPage() {
         <nav className="flex-1 py-4 space-y-1 px-2">
           {[
             { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-            { id: "leads", label: "Leads", icon: Users, count: leads.filter(l => !l.isDeleted).length },
+            { id: "leads", label: "Leads", icon: Users, count: v2Leads.filter((l: any) => !l.is_deleted).length },
             { id: "pipeline", label: "Pipeline", icon: Layers },
             { id: "reports", label: "Reports", icon: BarChart3 },
             { id: "data", label: "Data", icon: Database, count: dataRecords.length },
@@ -604,27 +593,30 @@ export default function CRMPage() {
           <h1 className="font-semibold text-gray-900 text-base capitalize">{view}</h1>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search…"
-                value={view === "data" ? dataSearch : search}
-                onChange={e => view === "data" ? setDataSearch(e.target.value) : setSearch(e.target.value)}
-                className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
-              />
-            </div>
-            <button
-              onClick={() => {
-                if (view === "data") setShowAddData(true)
-                else if (view === "leads" && useV2) setShowAddLeadV2(true)
-                else openAddLead()
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              {view === "data" ? "Add Data" : "Add Lead"}
-            </button>
+            {view !== "leads" && (
+              <>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search…"
+                    value={view === "data" ? dataSearch : search}
+                    onChange={e => view === "data" ? setDataSearch(e.target.value) : setSearch(e.target.value)}
+                    className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (view === "data") setShowAddData(true)
+                    else openAddLead()
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  {view === "data" ? "Add Data" : "Add Lead"}
+                </button>
+              </>
+            )}
             <button onClick={loadAll} className="text-gray-400 hover:text-gray-600 p-1.5" title="Refresh">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -637,45 +629,7 @@ export default function CRMPage() {
             <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} />
           )}
           {view === "leads" && (
-            <LeadsView
-              leads={leads}
-              filteredLeads={filteredLeads}
-              selectedLead={selectedLead}
-              leadHistory={leadHistory}
-              detailTab={detailTab}
-              setDetailTab={setDetailTab}
-              leadFilter={leadFilter}
-              setLeadFilter={setLeadFilter}
-              activeLeadTab={activeLeadTab}
-              setActiveLeadTab={setActiveLeadTab}
-              showStatusAction={showStatusAction}
-              setShowStatusAction={setShowStatusAction}
-              selectedSubStatus={selectedSubStatus}
-              setSelectedSubStatus={setSelectedSubStatus}
-              statusNote={statusNote}
-              setStatusNote={setStatusNote}
-              statusSchedule={statusSchedule}
-              setStatusSchedule={setStatusSchedule}
-              bookingForm={bookingForm}
-              setBookingForm={setBookingForm}
-              savingStatus={savingStatus}
-              addNoteText={addNoteText}
-              setAddNoteText={setAddNoteText}
-              savingNote={savingNote}
-              onSelectLead={selectLead}
-              onEditLead={openEditLead}
-              onDeleteLead={deleteLead}
-              onSaveStatus={saveStatusAction}
-              onSaveNote={saveNote}
-              onAddLead={openAddLead}
-              user={user}
-              useV2={useV2}
-              setUseV2={setUseV2}
-              v2Leads={v2Leads}
-              showAddLeadV2={showAddLeadV2}
-              setShowAddLeadV2={setShowAddLeadV2}
-              onV2LeadsReload={loadV2Leads}
-            />
+            <LeadsView v2Leads={v2Leads} user={user} onReload={loadAll} />
           )}
           {view === "pipeline" && (
             <PipelineView leads={leads.filter(l => !l.isDeleted)} onStatusChange={async (leadId, newStatus) => {

@@ -28,7 +28,16 @@ export async function GET(request: NextRequest) {
       SELECT
         l.*,
         COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'active') AS active_enquiry_count,
-        COUNT(DISTINCT ls.id) AS listing_count
+        COUNT(DISTINCT ls.id) AS listing_count,
+        (SELECT e2.stage FROM crm_enquiries e2
+         WHERE e2.lead_id = l.lead_id AND e2.status = 'active'
+         ORDER BY e2.updated_at DESC LIMIT 1) AS latest_enquiry_stage,
+        (SELECT e2.enquiry_id FROM crm_enquiries e2
+         WHERE e2.lead_id = l.lead_id AND e2.status = 'active'
+         ORDER BY e2.updated_at DESC LIMIT 1) AS latest_enquiry_id,
+        (SELECT a.description FROM crm_activity_log a
+         WHERE a.lead_id = l.lead_id AND a.activity_type = 'note_added'
+         ORDER BY a.created_at DESC LIMIT 1) AS last_note
       FROM crm_leads_v2 l
       LEFT JOIN crm_enquiries e ON e.lead_id = l.lead_id
       LEFT JOIN crm_listings ls ON ls.lead_id = l.lead_id
