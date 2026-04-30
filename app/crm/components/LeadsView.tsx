@@ -5,6 +5,7 @@ import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
   X, Check, Loader2, MoreHorizontal, Trash2, Calendar, FileText,
   Activity, TrendingUp, Building2, Filter, Pencil, ChevronRight, ChevronDown,
+  SlidersHorizontal, MapPin, Home,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -97,6 +98,47 @@ const TAG_OPTIONS_V2 = ['Hot', 'Warm', 'Cold', 'Escalated', 'Highlighted']
 const BEDROOM_OPTIONS = ['Any', '1', '2', '3', '4+']
 const LEAD_TYPES = ['Buyer', 'Seller', 'Both']
 
+const DATE_TYPE_OPTIONS = [
+  { id: 'updated_at',          label: 'Modified Date' },
+  { id: 'created_at',          label: 'Created Date' },
+  { id: 'latest_scheduled_at', label: 'Scheduled Date' },
+  { id: 'deleted_at',          label: 'Deleted Date' },
+]
+
+const DATE_FIELD_MAP: Record<string, string> = {
+  updated_at:          'updated_at',
+  created_at:          'created_at',
+  latest_scheduled_at: 'latest_scheduled_at',
+  deleted_at:          'deleted_at',
+}
+
+const SEARCH_FIELD_OPTIONS = [
+  { id: 'name',              label: 'Lead Name',            defaultOn: true },
+  { id: 'phone',             label: 'Contact No',           defaultOn: true },
+  { id: 'alternate_phone',   label: 'Alternate Contact No', defaultOn: false },
+  { id: 'email',             label: 'Email',                defaultOn: false },
+  { id: 'sub_source',        label: 'Sub Source',           defaultOn: false },
+  { id: 'source',            label: 'Source',               defaultOn: false },
+  { id: 'customer_location', label: 'Location',             defaultOn: false },
+  { id: 'referral_phone',    label: 'Referral Contact No',  defaultOn: false },
+]
+
+const COLUMNS_CONFIG = [
+  { id: 'modified',             label: 'Assigned / Modified', defaultOn: true },
+  { id: 'phone',                label: 'Phone',               defaultOn: true },
+  { id: 'last_note',            label: 'Notes',               defaultOn: true },
+  { id: 'source',               label: 'Source',              defaultOn: true },
+  { id: 'status',               label: 'Status',              defaultOn: true },
+  { id: 'created_at',           label: 'Created Date',        defaultOn: false },
+  { id: 'latest_scheduled_at',  label: 'Scheduled Date',      defaultOn: false },
+  { id: 'email',                label: 'Email',               defaultOn: false },
+  { id: 'customer_location',    label: 'Location',            defaultOn: false },
+  { id: 'lead_type',            label: 'Lead Type',           defaultOn: false },
+  { id: 'active_enquiry_count', label: 'Enquiries #',         defaultOn: false },
+]
+
+const DEFAULT_VISIBLE_COLUMNS = new Set(COLUMNS_CONFIG.filter(c => c.defaultOn).map(c => c.id))
+
 type FilterState = {
   sources: string[]
   leadType: string
@@ -167,10 +209,27 @@ export function LeadsView({ v2Leads, user, onReload }: {
   const [stageTab, setStageTab] = useState('All')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [dateSort, setDateSort] = useState('modified')
+  const [dateType, setDateType] = useState('updated_at')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS)
   const [pendingFilters, setPendingFilters] = useState<FilterState>(EMPTY_FILTERS)
+
+  // ── Search fields ──
+  const [searchFields, setSearchFields] = useState<string[]>(['name', 'phone'])
+  const [showSearchFields, setShowSearchFields] = useState(false)
+
+  // ── Column visibility ──
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('crm_lead_columns_v1') : null
+      if (saved) return new Set(JSON.parse(saved))
+    } catch {}
+    return new Set(DEFAULT_VISIBLE_COLUMNS)
+  })
+  const [showColumnPicker, setShowColumnPicker] = useState(false)
 
   // ── Bulk selection ──
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
@@ -184,7 +243,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
   const [selectedLead, setSelectedLead] = useState<any>(null)
   const [detail, setDetail] = useState<any>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [detailTab, setDetailTab] = useState<'overview' | 'enquiries' | 'status' | 'history' | 'notes' | 'document'>('overview')
+  const [detailTab, setDetailTab] = useState<'overview' | 'enquiries' | 'listings' | 'status' | 'history' | 'notes' | 'document'>('overview')
 
   // ── Add Lead modal ──
   const [showAddLead, setShowAddLead] = useState(false)
@@ -207,12 +266,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
   const [noteText, setNoteText] = useState('')
   const [savingNote, setSavingNote] = useState(false)
 
-  // ── Enquiry form ──
-  const [showAddEnquiry, setShowAddEnquiry] = useState(false)
-  const [enquiryForm, setEnquiryForm] = useState({
-    propertyType: '', locationPref: '', minBudget: '', maxBudget: '', currency: 'INR', bedrooms: 'Any', purpose: '',
-  })
-  const [savingEnquiry, setSavingEnquiry] = useState(false)
+  // (enquiry form state lives inside EnquiriesTab)
 
   // ── View mode ──
   const [viewMode, setViewMode] = useState<'people' | 'enquiry'>('people')
@@ -266,9 +320,11 @@ export function LeadsView({ v2Leads, user, onReload }: {
     if (debouncedSearch.trim()) {
       const q = debouncedSearch.toLowerCase()
       result = result.filter((l: any) =>
-        l.name?.toLowerCase().includes(q) ||
-        l.phone?.includes(q) ||
-        l.email?.toLowerCase().includes(q)
+        searchFields.some(field => {
+          const val = l[field]
+          if (!val) return false
+          return String(val).toLowerCase().includes(q)
+        })
       )
     }
 
@@ -288,16 +344,25 @@ export function LeadsView({ v2Leads, user, onReload }: {
       })
     }
 
+    if (dateFrom || dateTo) {
+      const fieldName = DATE_FIELD_MAP[dateType] || 'updated_at'
+      result = result.filter((l: any) => {
+        const raw = l[fieldName]
+        if (!raw) return false
+        const d = new Date(raw).getTime()
+        if (dateFrom && d < new Date(dateFrom).getTime()) return false
+        if (dateTo && d > new Date(dateTo + 'T23:59:59').getTime()) return false
+        return true
+      })
+    }
+
     return [...result].sort((a, b) => {
-      if (dateSort === 'created') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      if (dateSort === 'scheduled') {
-        const aT = a.latest_scheduled_at ? new Date(a.latest_scheduled_at).getTime() : 0
-        const bT = b.latest_scheduled_at ? new Date(b.latest_scheduled_at).getTime() : 0
-        return bT - aT
-      }
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      const fieldName = DATE_FIELD_MAP[dateType] || 'updated_at'
+      const aT = a[fieldName] ? new Date(a[fieldName]).getTime() : 0
+      const bT = b[fieldName] ? new Date(b[fieldName]).getTime() : 0
+      return bT - aT
     })
-  }, [v2Leads, stageTab, debouncedSearch, filters, dateSort])
+  }, [v2Leads, stageTab, debouncedSearch, filters, dateType, dateFrom, dateTo, searchFields])
 
   const allSelected = filteredLeads.length > 0 && filteredLeads.every((l: any) => selectedLeadIds.has(l.lead_id))
   const someSelected = filteredLeads.some((l: any) => selectedLeadIds.has(l.lead_id))
@@ -346,7 +411,6 @@ export function LeadsView({ v2Leads, user, onReload }: {
     setStageScheduledAt('')
     setStageLostReason('')
     setNoteText('')
-    setShowAddEnquiry(false)
     loadDetail(lead.lead_id)
   }
 
@@ -474,38 +538,6 @@ export function LeadsView({ v2Leads, user, onReload }: {
     }
   }
 
-  async function handleAddEnquiry() {
-    if (!selectedLead) return
-    setSavingEnquiry(true)
-    try {
-      const res = await fetch('/api/crm/v2/enquiries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leadId: selectedLead.lead_id,
-          propertyType: enquiryForm.propertyType,
-          locationPref: enquiryForm.locationPref,
-          minBudget: enquiryForm.minBudget ? Number(enquiryForm.minBudget) : 0,
-          maxBudget: enquiryForm.maxBudget ? Number(enquiryForm.maxBudget) : 0,
-          currency: enquiryForm.currency,
-          bedrooms: enquiryForm.bedrooms,
-          purpose: enquiryForm.purpose,
-        }),
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.error)
-      setShowAddEnquiry(false)
-      setEnquiryForm({ propertyType: '', locationPref: '', minBudget: '', maxBudget: '', currency: 'INR', bedrooms: 'Any', purpose: '' })
-      showToast('Enquiry added')
-      await loadDetail(selectedLead.lead_id)
-      onReload()
-    } catch (e: any) {
-      showToast(e.message || 'Error adding enquiry')
-    } finally {
-      setSavingEnquiry(false)
-    }
-  }
-
   async function handleDelete() {
     if (!selectedLead || user?.role !== 'admin') return
     const typed = prompt(`Type DELETE to confirm removing "${selectedLead.name}":`)
@@ -558,6 +590,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
               </button>
             ))}
           </div>
+          {/* Search with field selector */}
           <div className="relative flex-shrink-0">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -565,18 +598,130 @@ export function LeadsView({ v2Leads, user, onReload }: {
               placeholder="Search…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 w-36"
+              onFocus={() => { setShowDatePicker(false); setShowColumnPicker(false) }}
+              className="pl-8 pr-7 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 w-36"
             />
+            <button
+              onClick={() => { setShowSearchFields(p => !p); setShowDatePicker(false); setShowColumnPicker(false) }}
+              className={`absolute right-2 top-1/2 -translate-y-1/2 transition-colors ${showSearchFields ? 'text-[#422D83]' : 'text-gray-400 hover:text-gray-600'}`}
+              title="Search fields"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
           </div>
-          <select
-            value={dateSort}
-            onChange={e => setDateSort(e.target.value)}
-            className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-white text-gray-600 flex-shrink-0"
-          >
-            <option value="modified">Modified</option>
-            <option value="created">Created</option>
-            <option value="scheduled">Scheduled</option>
-          </select>
+
+          {/* Date type + range picker */}
+          <div className="flex items-center flex-shrink-0 relative">
+            <select
+              value={dateType}
+              onChange={e => { setDateType(e.target.value); setDateFrom(''); setDateTo('') }}
+              className="text-xs border border-gray-300 rounded-l-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-white text-gray-600 border-r-0"
+            >
+              {DATE_TYPE_OPTIONS.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </select>
+            <button
+              onClick={() => { setShowDatePicker(p => !p); setShowSearchFields(false); setShowColumnPicker(false) }}
+              className={`text-xs px-2 py-1.5 border border-gray-300 rounded-r-lg flex items-center gap-1 transition-colors ${
+                showDatePicker || dateFrom || dateTo
+                  ? 'bg-[#422D83] text-white border-[#422D83]'
+                  : 'bg-white text-gray-600 hover:border-[#422D83]'
+              }`}
+              title="Date range"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              {(dateFrom || dateTo) && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />}
+            </button>
+            {showDatePicker && (
+              <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-30 p-4 w-64">
+                <p className="text-xs font-semibold text-gray-700 mb-3">Date Range Filter</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">From</label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={e => setDateFrom(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 block mb-1">To</label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={e => setDateTo(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => setShowDatePicker(false)}
+                    className="flex-1 text-xs py-1.5 bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b]"
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={() => { setDateFrom(''); setDateTo(''); setShowDatePicker(false) }}
+                    className="flex-1 text-xs py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Manage Columns */}
+          <div className="relative flex-shrink-0">
+            <button
+              onClick={() => { setShowColumnPicker(p => !p); setShowDatePicker(false); setShowSearchFields(false) }}
+              className={`text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors ${
+                showColumnPicker ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#422D83]'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Columns
+            </button>
+            {showColumnPicker && (
+              <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-30 p-4 w-60">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Visible Columns</p>
+                <div className="flex items-center gap-2 opacity-40 mb-1 px-1">
+                  <input type="checkbox" checked readOnly className="rounded" />
+                  <span className="text-xs text-gray-700">Lead Name (always visible)</span>
+                </div>
+                <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                  {COLUMNS_CONFIG.map(col => (
+                    <label key={col.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-1 rounded">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.has(col.id)}
+                        onChange={e => {
+                          const next = new Set(visibleColumns)
+                          if (e.target.checked) next.add(col.id)
+                          else next.delete(col.id)
+                          setVisibleColumns(next)
+                          try { localStorage.setItem('crm_lead_columns_v1', JSON.stringify([...next])) } catch {}
+                        }}
+                        className="rounded"
+                      />
+                      <span className="text-xs text-gray-700">{col.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    setVisibleColumns(new Set(DEFAULT_VISIBLE_COLUMNS))
+                    try { localStorage.removeItem('crm_lead_columns_v1') } catch {}
+                  }}
+                  className="mt-2 text-xs text-gray-400 hover:text-gray-600 w-full text-left px-1"
+                >
+                  Reset to defaults
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => showFilters ? setShowFilters(false) : openFilters()}
             className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors ${
@@ -603,6 +748,32 @@ export function LeadsView({ v2Leads, user, onReload }: {
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Search fields panel */}
+        {showSearchFields && (
+          <div className="border-b border-gray-200 px-3 py-3 bg-gray-50 flex-shrink-0">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Search In</p>
+            <div className="flex flex-wrap gap-2">
+              {SEARCH_FIELD_OPTIONS.map(f => {
+                const isOn = searchFields.includes(f.id)
+                return (
+                  <button
+                    key={f.id}
+                    onClick={() => setSearchFields(prev =>
+                      isOn ? prev.filter(x => x !== f.id) : [...prev, f.id]
+                    )}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      isOn ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#422D83]'
+                    }`}
+                  >
+                    {f.label}
+                    {isOn && ' ×'}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Filters panel */}
         {showFilters && (
@@ -819,11 +990,17 @@ export function LeadsView({ v2Leads, user, onReload }: {
                     />
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead Name</th>
-                  <th className="px-3 py-3 w-28 text-left text-xs font-semibold uppercase tracking-wide">Modified</th>
-                  <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Phone</th>
-                  <th className="px-3 py-3 w-36 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>
-                  <th className="px-3 py-3 w-20 text-left text-xs font-semibold uppercase tracking-wide">Source</th>
-                  <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Status</th>
+                  {visibleColumns.has('modified') && <th className="px-3 py-3 w-28 text-left text-xs font-semibold uppercase tracking-wide">Assigned / Modified</th>}
+                  {visibleColumns.has('phone') && <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Phone</th>}
+                  {visibleColumns.has('last_note') && <th className="px-3 py-3 w-36 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>}
+                  {visibleColumns.has('source') && <th className="px-3 py-3 w-20 text-left text-xs font-semibold uppercase tracking-wide">Source</th>}
+                  {visibleColumns.has('status') && <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Status</th>}
+                  {visibleColumns.has('created_at') && <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide">Created</th>}
+                  {visibleColumns.has('latest_scheduled_at') && <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide">Scheduled</th>}
+                  {visibleColumns.has('email') && <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Email</th>}
+                  {visibleColumns.has('customer_location') && <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide">Location</th>}
+                  {visibleColumns.has('lead_type') && <th className="px-3 py-3 w-16 text-left text-xs font-semibold uppercase tracking-wide">Type</th>}
+                  {visibleColumns.has('active_enquiry_count') && <th className="px-3 py-3 w-12 text-left text-xs font-semibold uppercase tracking-wide">Enq</th>}
                   <th className="px-3 py-3 w-14" />
                 </tr>
               </thead>
@@ -872,35 +1049,75 @@ export function LeadsView({ v2Leads, user, onReload }: {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-4 w-28">
-                          <p className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{lead.assigned_rm || 'Unassigned'}</p>
-                          <p className="text-xs text-gray-400">At {formatDate(lead.updated_at)}</p>
-                        </td>
-                        <td className="px-3 py-4 w-32">
-                          <div className="flex items-center gap-1.5">
-                            <a href={`tel:${lead.country_code || '+91'}${lead.phone}`} onClick={e => e.stopPropagation()} className="text-gray-400 hover:text-blue-600" title="Call">
-                              <Phone className="w-3.5 h-3.5" />
-                            </a>
-                            <span className="text-xs text-gray-600 truncate max-w-[56px]">{lead.phone}</span>
-                            <a href={`https://wa.me/${phoneClean}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="WhatsApp">
-                              <MessageCircle className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                        </td>
-                        <td className="px-3 py-4 w-36">
-                          <p className="text-xs text-gray-500 truncate max-w-[128px]">{lead.last_note || '—'}</p>
-                        </td>
-                        <td className="px-3 py-4 w-20">
-                          <p className="text-xs text-gray-600 truncate max-w-[72px]">{lead.source || '—'}</p>
-                        </td>
-                        <td className="px-3 py-4 w-32">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stageBadgeCls(lead.latest_enquiry_stage)}`}>
-                            {stageDisplayLabel(lead.latest_enquiry_stage)}
-                          </span>
-                          {lead.latest_enquiry_sub_stage && (
-                            <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[120px]">{lead.latest_enquiry_sub_stage}</p>
-                          )}
-                        </td>
+                        {visibleColumns.has('modified') && (
+                          <td className="px-3 py-4 w-28">
+                            <p className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{lead.assigned_rm || 'Unassigned'}</p>
+                            <p className="text-xs text-gray-400">At {formatDate(lead.updated_at)}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('phone') && (
+                          <td className="px-3 py-4 w-32">
+                            <div className="flex items-center gap-1.5">
+                              <a href={`tel:${lead.country_code || '+91'}${lead.phone}`} onClick={e => e.stopPropagation()} className="text-gray-400 hover:text-blue-600" title="Call">
+                                <Phone className="w-3.5 h-3.5" />
+                              </a>
+                              <span className="text-xs text-gray-600 truncate max-w-[56px]">{lead.phone}</span>
+                              <a href={`https://wa.me/${phoneClean}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="WhatsApp">
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          </td>
+                        )}
+                        {visibleColumns.has('last_note') && (
+                          <td className="px-3 py-4 w-36">
+                            <p className="text-xs text-gray-500 truncate max-w-[128px]">{lead.last_note || '—'}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('source') && (
+                          <td className="px-3 py-4 w-20">
+                            <p className="text-xs text-gray-600 truncate max-w-[72px]">{lead.source || '—'}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('status') && (
+                          <td className="px-3 py-4 w-32">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stageBadgeCls(lead.latest_enquiry_stage)}`}>
+                              {stageDisplayLabel(lead.latest_enquiry_stage)}
+                            </span>
+                            {lead.latest_enquiry_sub_stage && (
+                              <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[120px]">{lead.latest_enquiry_sub_stage}</p>
+                            )}
+                          </td>
+                        )}
+                        {visibleColumns.has('created_at') && (
+                          <td className="px-3 py-4 w-24">
+                            <p className="text-xs text-gray-500">{formatDate(lead.created_at)}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('latest_scheduled_at') && (
+                          <td className="px-3 py-4 w-24">
+                            <p className="text-xs text-gray-500">{lead.latest_scheduled_at ? formatDate(lead.latest_scheduled_at) : '—'}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('email') && (
+                          <td className="px-3 py-4 w-32">
+                            <p className="text-xs text-gray-500 truncate max-w-[120px]">{lead.email || '—'}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('customer_location') && (
+                          <td className="px-3 py-4 w-24">
+                            <p className="text-xs text-gray-500 truncate max-w-[90px]">{lead.customer_location || '—'}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('lead_type') && (
+                          <td className="px-3 py-4 w-16">
+                            <p className="text-xs text-gray-500">{lead.lead_type || '—'}</p>
+                          </td>
+                        )}
+                        {visibleColumns.has('active_enquiry_count') && (
+                          <td className="px-3 py-4 w-12">
+                            <p className="text-xs text-gray-500 text-center">{lead.active_enquiry_count || 0}</p>
+                          </td>
+                        )}
                         <td className="px-3 py-4 w-14" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-0.5">
                             <button
@@ -1020,7 +1237,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
 
           {/* Tabs — sticky */}
           <div className="border-b border-gray-100 flex overflow-x-auto flex-shrink-0 scrollbar-hide sticky top-0 bg-white z-10">
-            {(['overview', 'enquiries', 'status', 'history', 'notes', 'document'] as const).map(tab => (
+            {(['overview', 'enquiries', 'listings', 'status', 'history', 'notes', 'document'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setDetailTab(tab)}
@@ -1046,13 +1263,20 @@ export function LeadsView({ v2Leads, user, onReload }: {
                 {detailTab === 'overview' && <OverviewTab lead={detail?.lead || selectedLead} />}
                 {detailTab === 'enquiries' && (
                   <EnquiriesTab
+                    key={selectedLead?.lead_id}
                     enquiries={detail?.enquiries || []}
-                    showAddEnquiry={showAddEnquiry}
-                    setShowAddEnquiry={setShowAddEnquiry}
-                    enquiryForm={enquiryForm}
-                    setEnquiryForm={setEnquiryForm}
-                    savingEnquiry={savingEnquiry}
-                    onAddEnquiry={handleAddEnquiry}
+                    leadId={selectedLead?.lead_id || ''}
+                    onRefresh={() => { if (selectedLead?.lead_id) loadDetail(selectedLead.lead_id) }}
+                    showToast={showToast}
+                  />
+                )}
+                {detailTab === 'listings' && (
+                  <ListingsTab
+                    key={selectedLead?.lead_id}
+                    listings={detail?.listings || []}
+                    leadId={selectedLead?.lead_id || ''}
+                    onRefresh={() => { if (selectedLead?.lead_id) loadDetail(selectedLead.lead_id) }}
+                    showToast={showToast}
                   />
                 )}
                 {detailTab === 'status' && (
@@ -1247,81 +1471,295 @@ function OverviewTab({ lead }: { lead: any }) {
 
 // ─── Enquiries Tab ────────────────────────────────────────────────────────────
 
-function EnquiriesTab({ enquiries, showAddEnquiry, setShowAddEnquiry, enquiryForm, setEnquiryForm, savingEnquiry, onAddEnquiry }: any) {
+function EnquiriesTab({ enquiries, leadId, onRefresh, showToast }: {
+  enquiries: any[]
+  leadId: string
+  onRefresh: () => void
+  showToast: (msg: string) => void
+}) {
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [addForm, setAddForm] = useState({
+    projectInterest: '', propertyType: '', locationPref: '',
+    minBudget: '', maxBudget: '', currency: 'INR', bedrooms: 'Any', purpose: '',
+  })
+  const [addSaving, setAddSaving] = useState(false)
+
+  const [stageCardId, setStageCardId] = useState<string | null>(null)
+  const [stageForm, setStageForm] = useState({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
+  const [stageSaving, setStageSaving] = useState(false)
+
+  async function handleSaveStage(enquiryId: string) {
+    if (!stageForm.stage || !stageForm.notes.trim()) return
+    setStageSaving(true)
+    try {
+      const res = await fetch(`/api/crm/v2/enquiries/${enquiryId}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stage: stageForm.stage,
+          subStage: stageForm.subStage,
+          notes: stageForm.notes,
+          scheduledAt: stageForm.scheduledAt || undefined,
+          lostReason: stageForm.lostReason || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setStageCardId(null)
+      setStageForm({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
+      showToast(`Stage updated to ${stageDisplayLabel(stageForm.stage)}`)
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error saving stage')
+    } finally {
+      setStageSaving(false)
+    }
+  }
+
+  async function handleSaveAdd() {
+    if (!leadId) return
+    setAddSaving(true)
+    try {
+      const res = await fetch('/api/crm/v2/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId,
+          projectName: addForm.projectInterest,
+          propertyType: addForm.propertyType,
+          locationPref: addForm.locationPref,
+          minBudget: addForm.minBudget ? Number(addForm.minBudget) : 0,
+          maxBudget: addForm.maxBudget ? Number(addForm.maxBudget) : 0,
+          currency: addForm.currency,
+          bedrooms: addForm.bedrooms,
+          purpose: addForm.purpose,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setShowAdd(false)
+      setAddForm({ projectInterest: '', propertyType: '', locationPref: '', minBudget: '', maxBudget: '', currency: 'INR', bedrooms: 'Any', purpose: '' })
+      showToast('Enquiry added')
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error adding enquiry')
+    } finally {
+      setAddSaving(false)
+    }
+  }
 
   return (
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">Enquiries ({enquiries.length})</h3>
-        <button onClick={() => setShowAddEnquiry(true)} className="text-xs text-[#422D83] hover:underline flex items-center gap-1">
-          <Plus className="w-3 h-3" /> Add
+        <button
+          onClick={() => setShowAdd(p => !p)}
+          className="text-xs text-[#422D83] hover:underline flex items-center gap-1"
+        >
+          <Plus className="w-3 h-3" /> Add Enquiry
         </button>
       </div>
 
-      {enquiries.length === 0 && !showAddEnquiry && (
+      {enquiries.length === 0 && !showAdd && (
         <p className="text-xs text-gray-400 py-4 text-center">No enquiries yet</p>
       )}
 
-      {enquiries.map((enq: any) => (
-        <div key={enq.enquiry_id} className={`border rounded-lg p-3 ${enq.status === 'active' ? 'border-[#422D83]/20 bg-[#422D83]/5' : 'border-gray-200 bg-gray-50'}`}>
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-700">{enq.enquiry_id}</p>
-              {enq.property_type && (
-                <p className="text-xs text-gray-500">{enq.property_type}{enq.location_pref ? ` · ${enq.location_pref}` : ''}</p>
-              )}
-              {(enq.min_budget > 0 || enq.max_budget > 0) && (
-                <p className="text-xs text-gray-500">{enq.currency} {enq.min_budget ? enq.min_budget.toLocaleString() : '0'}–{enq.max_budget ? enq.max_budget.toLocaleString() : '?'}</p>
-              )}
-              <p className="text-xs text-gray-400 mt-0.5">{formatDate(enq.created_at)}</p>
-            </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${stageBadgeCls(enq.stage)}`}>
-              {stageDisplayLabel(enq.stage || 'New')}
-            </span>
-          </div>
-        </div>
-      ))}
+      {enquiries.map((enq: any) => {
+        const isChangingStage = stageCardId === enq.enquiry_id
+        const subStages = stageForm.stage ? (SUB_STAGES[stageForm.stage] || []) : []
+        const needsSchedule = ['Callback', 'Schedule Meeting', 'Schedule Site Visit'].includes(stageForm.stage)
+        const needsLostReason = ['Not Interested', 'Drop'].includes(stageForm.stage)
 
-      {showAddEnquiry && (
-        <div className="border border-[#422D83]/20 rounded-lg p-3 space-y-3 bg-[#422D83]/5">
+        return (
+          <div
+            key={enq.enquiry_id}
+            className={`border rounded-xl overflow-hidden ${enq.status === 'active' ? 'border-[#422D83]/20' : 'border-gray-200 opacity-60'}`}
+          >
+            <div className={`p-3 ${enq.status === 'active' ? 'bg-[#422D83]/5' : 'bg-gray-50'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-xs font-mono text-gray-500">{enq.enquiry_id}</p>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${stageBadgeCls(enq.stage)}`}>
+                      {stageDisplayLabel(enq.stage || 'New')}
+                    </span>
+                    {enq.sub_stage && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{enq.sub_stage}</span>
+                    )}
+                    {enq.status === 'active' && (
+                      <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Active</span>
+                    )}
+                  </div>
+                  {enq.property_type && (
+                    <p className="text-xs text-gray-600">{enq.property_type}{enq.location_pref ? ` · ${enq.location_pref}` : ''}</p>
+                  )}
+                  {(enq.min_budget > 0 || enq.max_budget > 0) && (
+                    <p className="text-xs text-gray-500">
+                      {enq.currency === 'AED' ? 'AED' : '₹'}{enq.min_budget ? Number(enq.min_budget).toLocaleString('en-IN') : '0'}
+                      {' – '}
+                      {enq.currency === 'AED' ? 'AED' : '₹'}{enq.max_budget ? Number(enq.max_budget).toLocaleString('en-IN') : '?'}
+                    </p>
+                  )}
+                  {enq.scheduled_at && (
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                      <Calendar className="w-3 h-3" />
+                      Scheduled: {new Date(enq.scheduled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-gray-400 mt-1">{formatDate(enq.created_at)}</p>
+                </div>
+                {enq.status === 'active' && (
+                  <button
+                    onClick={() => {
+                      if (isChangingStage) { setStageCardId(null) }
+                      else { setStageCardId(enq.enquiry_id); setStageForm({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' }) }
+                    }}
+                    className={`flex-shrink-0 text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                      isChangingStage
+                        ? 'bg-[#422D83] text-white border-[#422D83]'
+                        : 'bg-white text-gray-600 border-gray-300 hover:border-[#422D83]'
+                    }`}
+                  >
+                    {isChangingStage ? 'Cancel' : 'Change Stage'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isChangingStage && (
+              <div className="border-t border-[#422D83]/10 bg-white p-3 space-y-3">
+                <p className="text-xs font-semibold text-gray-700">Move to stage</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {STAGE_ACTIONS.map(action => (
+                    <button
+                      key={action.apiStage}
+                      onClick={() => setStageForm(p => ({ ...p, stage: p.stage === action.apiStage ? '' : action.apiStage, subStage: '', lostReason: '' }))}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${action.color} ${
+                        stageForm.stage === action.apiStage ? 'ring-2 ring-offset-1 ring-[#422D83]/30' : ''
+                      }`}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+
+                {subStages.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {subStages.map((s: string) => (
+                      <button
+                        key={s}
+                        onClick={() => setStageForm(p => ({ ...p, subStage: p.subStage === s ? '' : s }))}
+                        className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                          stageForm.subStage === s ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {needsSchedule && (
+                  <input
+                    type="datetime-local"
+                    value={stageForm.scheduledAt}
+                    onChange={e => setStageForm(p => ({ ...p, scheduledAt: e.target.value }))}
+                    className={inputCls}
+                  />
+                )}
+
+                {needsLostReason && (
+                  <select
+                    value={stageForm.lostReason}
+                    onChange={e => setStageForm(p => ({ ...p, lostReason: e.target.value }))}
+                    className={inputCls}
+                  >
+                    <option value="">Select reason…</option>
+                    {(SUB_STAGES[stageForm.stage] || []).map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                )}
+
+                <textarea
+                  value={stageForm.notes}
+                  onChange={e => setStageForm(p => ({ ...p, notes: e.target.value }))}
+                  className={inputCls + ' resize-none'}
+                  rows={2}
+                  placeholder="Notes (required)…"
+                />
+                <button
+                  onClick={() => handleSaveStage(enq.enquiry_id)}
+                  disabled={stageSaving || !stageForm.stage || !stageForm.notes.trim() || (needsLostReason && !stageForm.lostReason)}
+                  className="px-3 py-1.5 bg-[#422D83] text-white text-xs rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1"
+                >
+                  {stageSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Save Stage
+                </button>
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {showAdd && (
+        <div className="border border-[#422D83]/20 rounded-xl p-4 space-y-3 bg-[#422D83]/5">
           <p className="text-xs font-semibold text-[#422D83]">New Enquiry</p>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Project of Interest</label>
+            <input type="text" value={addForm.projectInterest} onChange={e => setAddForm(p => ({ ...p, projectInterest: e.target.value }))} className={inputCls} placeholder="Project name" />
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs text-gray-600 mb-1 block">Property Type</label>
-              <select value={enquiryForm.propertyType} onChange={e => setEnquiryForm((p: any) => ({ ...p, propertyType: e.target.value }))} className={inputCls}>
+              <select value={addForm.propertyType} onChange={e => setAddForm(p => ({ ...p, propertyType: e.target.value }))} className={inputCls}>
                 <option value="">Select…</option>
                 {PROPERTY_TYPES_V2.map(pt => <option key={pt}>{pt}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs text-gray-600 mb-1 block">Purpose</label>
-              <select value={enquiryForm.purpose} onChange={e => setEnquiryForm((p: any) => ({ ...p, purpose: e.target.value }))} className={inputCls}>
+              <select value={addForm.purpose} onChange={e => setAddForm(p => ({ ...p, purpose: e.target.value }))} className={inputCls}>
                 <option value="">Select…</option>
                 {PURPOSE_OPTIONS_V2.map(p => <option key={p}>{p}</option>)}
               </select>
             </div>
           </div>
           <div>
+            <label className="text-xs text-gray-600 mb-1 block">BHK</label>
+            <div className="flex gap-1.5">
+              {BEDROOM_OPTIONS.map(b => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setAddForm(p => ({ ...p, bedrooms: b }))}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${addForm.bedrooms === b ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300'}`}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
             <label className="text-xs text-gray-600 mb-1 block">Location Preference</label>
-            <input type="text" value={enquiryForm.locationPref} onChange={e => setEnquiryForm((p: any) => ({ ...p, locationPref: e.target.value }))} className={inputCls} placeholder="Area / locality" />
+            <input type="text" value={addForm.locationPref} onChange={e => setAddForm(p => ({ ...p, locationPref: e.target.value }))} className={inputCls} placeholder="Area / locality" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs text-gray-600 mb-1 block">Min Budget</label>
-              <input type="number" value={enquiryForm.minBudget} onChange={e => setEnquiryForm((p: any) => ({ ...p, minBudget: e.target.value }))} className={inputCls} placeholder="Min" />
+              <label className="text-xs text-gray-600 mb-1 block">Min Budget (₹)</label>
+              <input type="number" value={addForm.minBudget} onChange={e => setAddForm(p => ({ ...p, minBudget: e.target.value }))} className={inputCls} placeholder="Min" />
             </div>
             <div>
-              <label className="text-xs text-gray-600 mb-1 block">Max Budget</label>
-              <input type="number" value={enquiryForm.maxBudget} onChange={e => setEnquiryForm((p: any) => ({ ...p, maxBudget: e.target.value }))} className={inputCls} placeholder="Max" />
+              <label className="text-xs text-gray-600 mb-1 block">Max Budget (₹)</label>
+              <input type="number" value={addForm.maxBudget} onChange={e => setAddForm(p => ({ ...p, maxBudget: e.target.value }))} className={inputCls} placeholder="Max" />
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={onAddEnquiry} disabled={savingEnquiry} className="px-3 py-1.5 bg-[#422D83] text-white text-xs rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1">
-              {savingEnquiry ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-              Save
+            <button onClick={handleSaveAdd} disabled={addSaving} className="px-3 py-1.5 bg-[#422D83] text-white text-xs rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1">
+              {addSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save Enquiry
             </button>
-            <button onClick={() => setShowAddEnquiry(false)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-lg hover:bg-gray-200">Cancel</button>
+            <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-lg hover:bg-gray-200">Cancel</button>
           </div>
         </div>
       )}
@@ -1596,6 +2034,198 @@ function DocumentTab() {
       <FileText className="w-10 h-10 mb-2 opacity-30" />
       <p className="text-sm font-medium">Document upload</p>
       <p className="text-xs mt-1">Coming soon</p>
+    </div>
+  )
+}
+
+// ─── Listings Tab ─────────────────────────────────────────────────────────────
+
+const LISTING_STATUS_BADGE: Record<string, string> = {
+  'pending':        'bg-gray-100 text-gray-600',
+  'rm_verified':    'bg-blue-100 text-blue-700',
+  'admin_approved': 'bg-purple-100 text-purple-700',
+  'live':           'bg-green-100 text-green-700',
+}
+
+const LISTING_STATUS_LABEL: Record<string, string> = {
+  'pending':        'Pending',
+  'rm_verified':    'RM Verified',
+  'admin_approved': 'Admin Approved',
+  'live':           'Live',
+}
+
+const BEDROOM_OPTS = ['1', '2', '3', '4', '4+']
+
+function ListingsTab({ listings, leadId, onRefresh, showToast }: {
+  listings: any[]
+  leadId: string
+  onRefresh: () => void
+  showToast: (msg: string) => void
+}) {
+  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({
+    title: '', propertyType: '', address: '', city: '', locality: '',
+    bedrooms: '2', bathrooms: '', areaSqft: '', askingPrice: '', sellerNotes: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    if (!leadId || !form.title.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/crm/v2/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId,
+          title: form.title,
+          propertyType: form.propertyType,
+          address: form.address,
+          city: form.city,
+          locality: form.locality,
+          bedrooms: form.bedrooms ? Number(form.bedrooms) : 0,
+          bathrooms: form.bathrooms ? Number(form.bathrooms) : 0,
+          areaSqft: form.areaSqft ? Number(form.areaSqft) : 0,
+          askingPrice: form.askingPrice ? Number(form.askingPrice) : 0,
+          sellerNotes: form.sellerNotes,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setShowAdd(false)
+      setForm({ title: '', propertyType: '', address: '', city: '', locality: '', bedrooms: '2', bathrooms: '', areaSqft: '', askingPrice: '', sellerNotes: '' })
+      showToast('Listing added')
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error adding listing')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-900">Listings ({listings.length})</h3>
+        <button
+          onClick={() => setShowAdd(p => !p)}
+          className="text-xs text-[#422D83] hover:underline flex items-center gap-1"
+        >
+          <Plus className="w-3 h-3" /> Add Listing
+        </button>
+      </div>
+
+      {listings.length === 0 && !showAdd && (
+        <p className="text-xs text-gray-400 py-4 text-center">No listings yet</p>
+      )}
+
+      {listings.map((ls: any) => {
+        const statusCls = LISTING_STATUS_BADGE[ls.status] || 'bg-gray-100 text-gray-600'
+        const statusLabel = LISTING_STATUS_LABEL[ls.status] || ls.status || 'Pending'
+        return (
+          <div key={ls.listing_id} className="border border-gray-200 rounded-xl p-3 bg-white">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-xs font-mono text-gray-500">{ls.listing_id}</p>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statusCls}`}>{statusLabel}</span>
+                </div>
+                <p className="text-sm font-semibold text-gray-800 truncate">{ls.title || 'Untitled'}</p>
+                {(ls.property_type || ls.bedrooms) && (
+                  <p className="text-xs text-gray-500">{ls.bedrooms ? `${ls.bedrooms}BHK ` : ''}{ls.property_type}</p>
+                )}
+                {(ls.city || ls.locality) && (
+                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {[ls.locality, ls.city].filter(Boolean).join(', ')}
+                  </p>
+                )}
+                {ls.asking_price > 0 && (
+                  <p className="text-xs text-gray-600 font-medium mt-0.5">
+                    Asking: ₹{Number(ls.asking_price).toLocaleString('en-IN')}
+                    {ls.area_sqft > 0 && <span className="text-gray-400 font-normal">  ·  {Number(ls.area_sqft).toLocaleString()} sqft</span>}
+                  </p>
+                )}
+              </div>
+              <Home className="w-8 h-8 text-gray-200 flex-shrink-0 mt-1" />
+            </div>
+            {ls.seller_notes && (
+              <p className="text-xs text-gray-400 mt-2 italic border-t border-gray-100 pt-2">"{ls.seller_notes}"</p>
+            )}
+          </div>
+        )
+      })}
+
+      {showAdd && (
+        <div className="border border-[#422D83]/20 rounded-xl p-4 space-y-3 bg-[#422D83]/5">
+          <p className="text-xs font-semibold text-[#422D83]">New Listing</p>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Property Title <span className="text-red-500">*</span></label>
+            <input type="text" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} className={inputCls} placeholder="e.g. 3BHK Flat, Sector 62 Noida" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Property Type</label>
+              <select value={form.propertyType} onChange={e => setForm(p => ({ ...p, propertyType: e.target.value }))} className={inputCls}>
+                <option value="">Select…</option>
+                {PROPERTY_TYPES_V2.map(pt => <option key={pt}>{pt}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Bedrooms</label>
+              <div className="flex gap-1 flex-wrap">
+                {BEDROOM_OPTS.map(b => (
+                  <button key={b} type="button" onClick={() => setForm(p => ({ ...p, bedrooms: b }))}
+                    className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${form.bedrooms === b ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300'}`}>
+                    {b}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Address</label>
+            <input type="text" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} className={inputCls} placeholder="Full address" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">City</label>
+              <input type="text" value={form.city} onChange={e => setForm(p => ({ ...p, city: e.target.value }))} className={inputCls} placeholder="City" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Locality</label>
+              <input type="text" value={form.locality} onChange={e => setForm(p => ({ ...p, locality: e.target.value }))} className={inputCls} placeholder="Area" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Bathrooms</label>
+              <input type="number" value={form.bathrooms} onChange={e => setForm(p => ({ ...p, bathrooms: e.target.value }))} className={inputCls} placeholder="2" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Area (sqft)</label>
+              <input type="number" value={form.areaSqft} onChange={e => setForm(p => ({ ...p, areaSqft: e.target.value }))} className={inputCls} placeholder="1200" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Asking Price (₹)</label>
+              <input type="number" value={form.askingPrice} onChange={e => setForm(p => ({ ...p, askingPrice: e.target.value }))} className={inputCls} placeholder="5000000" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Seller Notes</label>
+            <textarea value={form.sellerNotes} onChange={e => setForm(p => ({ ...p, sellerNotes: e.target.value }))} className={inputCls + ' resize-none'} rows={2} placeholder="Any notes from the seller…" />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleSave} disabled={saving || !form.title.trim()} className="px-3 py-1.5 bg-[#422D83] text-white text-xs rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save Listing
+            </button>
+            <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-lg hover:bg-gray-200">Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

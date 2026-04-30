@@ -17,10 +17,31 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200)
   const offset = parseInt(searchParams.get('offset') || '0')
 
+  // Date range params
+  const dateType = searchParams.get('dateType') || ''
+  const dateFrom = searchParams.get('from') || ''
+  const dateTo = searchParams.get('to') || ''
+  const ALLOWED_DATE_COLS: Record<string, string> = {
+    created_at: 'l.created_at',
+    updated_at: 'l.updated_at',
+    deleted_at: 'l.deleted_at',
+  }
+  const dateCol = ALLOWED_DATE_COLS[dateType] || ''
+
+  // Search fields
+  const rawFields = (searchParams.get('searchFields') || 'name,phone').split(',').map(f => f.trim())
+  const incName  = rawFields.includes('name')
+  const incPhone = rawFields.includes('phone')
+  const incEmail = rawFields.includes('email')
+  const incAlt   = rawFields.includes('alternate_phone')
+  const incSub   = rawFields.includes('sub_source')
+  const incSrc   = rawFields.includes('source')
+  const incLoc   = rawFields.includes('customer_location')
+  const incRef   = rawFields.includes('referral_phone')
+
   const showDeleted = type === 'Deleted'
   const showDuplicate = type === 'Duplicate'
   const showUnassigned = type === 'Unassigned'
-  // RM role always sees only own leads; admin can use "My Leads" filter
   const rmFilter = (user.role === 'rm' || type === 'My Leads') ? user.name : ''
 
   try {
@@ -55,9 +76,17 @@ export async function GET(request: NextRequest) {
         AND (l.assigned_rm = ${rmFilter} OR ${rmFilter} = '')
         AND (
           ${search} = ''
-          OR l.name  ILIKE ${'%' + search + '%'}
-          OR l.phone LIKE  ${'%' + search + '%'}
+          OR (${incName}  AND l.name  ILIKE ${'%' + search + '%'})
+          OR (${incPhone} AND l.phone LIKE  ${'%' + search + '%'})
+          OR (${incEmail} AND l.email ILIKE ${'%' + search + '%'})
+          OR (${incAlt}   AND l.alternate_phone LIKE ${'%' + search + '%'})
+          OR (${incSub}   AND l.sub_source ILIKE ${'%' + search + '%'})
+          OR (${incSrc}   AND l.source    ILIKE ${'%' + search + '%'})
+          OR (${incLoc}   AND l.customer_location ILIKE ${'%' + search + '%'})
+          OR (${incRef}   AND l.referral_phone LIKE ${'%' + search + '%'})
         )
+        AND (${dateCol} = '' OR ${dateFrom} = '' OR l.created_at >= ${dateFrom}::date OR l.updated_at >= ${dateFrom}::date OR l.deleted_at >= ${dateFrom}::date)
+        AND (${dateCol} = '' OR ${dateTo}   = '' OR l.created_at <= (${dateTo}::date + '1 day'::interval) OR l.updated_at <= (${dateTo}::date + '1 day'::interval) OR l.deleted_at <= (${dateTo}::date + '1 day'::interval))
       GROUP BY l.id
       ORDER BY l.updated_at DESC
       LIMIT ${limit} OFFSET ${offset}
@@ -74,8 +103,14 @@ export async function GET(request: NextRequest) {
         AND (l.assigned_rm = ${rmFilter} OR ${rmFilter} = '')
         AND (
           ${search} = ''
-          OR l.name  ILIKE ${'%' + search + '%'}
-          OR l.phone LIKE  ${'%' + search + '%'}
+          OR (${incName}  AND l.name  ILIKE ${'%' + search + '%'})
+          OR (${incPhone} AND l.phone LIKE  ${'%' + search + '%'})
+          OR (${incEmail} AND l.email ILIKE ${'%' + search + '%'})
+          OR (${incAlt}   AND l.alternate_phone LIKE ${'%' + search + '%'})
+          OR (${incSub}   AND l.sub_source ILIKE ${'%' + search + '%'})
+          OR (${incSrc}   AND l.source    ILIKE ${'%' + search + '%'})
+          OR (${incLoc}   AND l.customer_location ILIKE ${'%' + search + '%'})
+          OR (${incRef}   AND l.referral_phone LIKE ${'%' + search + '%'})
         )
     `
 
