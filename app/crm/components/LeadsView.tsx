@@ -243,10 +243,16 @@ export function LeadsView({ v2Leads, user, onReload }: {
   const [selectedLead, setSelectedLead] = useState<any>(null)
   const [detail, setDetail] = useState<any>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [detailTab, setDetailTab] = useState<'overview' | 'enquiries' | 'listings' | 'status' | 'history' | 'notes' | 'document'>('overview')
+  const [detailTab, setDetailTab] = useState<'overview' | 'enquiries' | 'listings' | 'status' | 'history' | 'notes' | 'document' | 'tasks'>('overview')
 
   // ── Add Lead modal ──
   const [showAddLead, setShowAddLead] = useState(false)
+  const [editingLead, setEditingLead] = useState<any>(null)
+
+  // ── RM Reassign ──
+  const [showReassign, setShowReassign] = useState(false)
+  const [reassignRm, setReassignRm] = useState('')
+  const [reassigning, setReassigning] = useState(false)
 
   // ── Toast ──
   const [toast, setToast] = useState('')
@@ -411,12 +417,16 @@ export function LeadsView({ v2Leads, user, onReload }: {
     setStageScheduledAt('')
     setStageLostReason('')
     setNoteText('')
+    setShowReassign(false)
+    setReassignRm('')
     loadDetail(lead.lead_id)
   }
 
   function closePanel() {
     setSelectedLead(null)
     setDetail(null)
+    setShowReassign(false)
+    setReassignRm('')
   }
 
   async function loadEnquiryView() {
@@ -548,6 +558,30 @@ export function LeadsView({ v2Leads, user, onReload }: {
       showToast('Lead deleted')
       onReload()
     } catch {}
+  }
+
+  async function handleReassign() {
+    if (!selectedLead || !reassignRm) return
+    setReassigning(true)
+    try {
+      const res = await fetch(`/api/crm/v2/leads/${selectedLead.lead_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedRm: reassignRm }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setShowReassign(false)
+      setReassignRm('')
+      setSelectedLead((prev: any) => prev ? { ...prev, assigned_rm: reassignRm } : prev)
+      showToast(`Lead reassigned to ${reassignRm}`)
+      await loadDetail(selectedLead.lead_id)
+      onReload()
+    } catch (e: any) {
+      showToast(e.message || 'Error reassigning lead')
+    } finally {
+      setReassigning(false)
+    }
   }
 
   const activeEnquiry = detail?.enquiries?.find((e: any) => e.status === 'active')
@@ -739,7 +773,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
             )}
           </button>
           <button
-            onClick={() => setShowAddLead(true)}
+            onClick={() => { setEditingLead(null); setShowAddLead(true) }}
             className="flex-shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> Add Lead
@@ -1122,8 +1156,8 @@ export function LeadsView({ v2Leads, user, onReload }: {
                           <div className="flex items-center gap-0.5">
                             <button
                               className="text-gray-300 hover:text-gray-600 p-1"
-                              title="Edit"
-                              onClick={() => selectLead(lead)}
+                              title="Edit lead"
+                              onClick={() => { setEditingLead(lead); setShowAddLead(true) }}
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -1222,6 +1256,13 @@ export function LeadsView({ v2Leads, user, onReload }: {
                     <Mail className="w-3.5 h-3.5" />
                   </a>
                 )}
+                <button
+                  onClick={() => { setShowReassign(p => !p); setReassignRm('') }}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${showReassign ? 'bg-[#422D83] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  title="Reassign RM"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                </button>
                 {user?.role === 'admin' && (
                   <button
                     onClick={handleDelete}
@@ -1233,11 +1274,37 @@ export function LeadsView({ v2Leads, user, onReload }: {
                 )}
               </div>
             </div>
+            {showReassign && (
+              <div className="mt-2 ml-7 flex items-center gap-2">
+                <select
+                  value={reassignRm}
+                  onChange={e => setReassignRm(e.target.value)}
+                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-white"
+                >
+                  <option value="">Select RM…</option>
+                  {rms.map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}
+                </select>
+                <button
+                  onClick={handleReassign}
+                  disabled={!reassignRm || reassigning}
+                  className="text-xs px-3 py-1.5 bg-[#422D83] text-white rounded-lg disabled:opacity-50 flex items-center gap-1 flex-shrink-0"
+                >
+                  {reassigning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                  Save
+                </button>
+                <button
+                  onClick={() => { setShowReassign(false); setReassignRm('') }}
+                  className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Tabs — sticky */}
           <div className="border-b border-gray-100 flex overflow-x-auto flex-shrink-0 scrollbar-hide sticky top-0 bg-white z-10">
-            {(['overview', 'enquiries', 'listings', 'status', 'history', 'notes', 'document'] as const).map(tab => (
+            {(['overview', 'enquiries', 'listings', 'status', 'history', 'notes', 'document', 'tasks'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setDetailTab(tab)}
@@ -1313,6 +1380,16 @@ export function LeadsView({ v2Leads, user, onReload }: {
                   />
                 )}
                 {detailTab === 'document' && <DocumentTab />}
+                {detailTab === 'tasks' && (
+                  <TasksTab
+                    key={selectedLead?.lead_id}
+                    tasks={detail?.tasks || []}
+                    leadId={selectedLead?.lead_id || ''}
+                    onRefresh={() => { if (selectedLead?.lead_id) loadDetail(selectedLead.lead_id) }}
+                    showToast={showToast}
+                    rms={rms}
+                  />
+                )}
               </>
             )}
           </div>
@@ -1323,11 +1400,18 @@ export function LeadsView({ v2Leads, user, onReload }: {
       {showAddLead && (
         <AddLeadModal
           user={user}
-          onClose={() => setShowAddLead(false)}
+          editingLead={editingLead}
+          onClose={() => { setShowAddLead(false); setEditingLead(null) }}
           onSuccess={(leadId: string) => {
             setShowAddLead(false)
+            setEditingLead(null)
             onReload()
-            showToast(`Lead ${leadId} created`)
+            if (editingLead) {
+              showToast('Lead updated')
+              if (selectedLead?.lead_id === editingLead.lead_id) loadDetail(editingLead.lead_id)
+            } else {
+              showToast(`Lead ${leadId} created`)
+            }
           }}
         />
       )}
@@ -2230,12 +2314,159 @@ function ListingsTab({ listings, leadId, onRefresh, showToast }: {
   )
 }
 
+// ─── Tasks Tab ────────────────────────────────────────────────────────────────
+
+function TasksTab({ tasks, leadId, onRefresh, showToast, rms }: {
+  tasks: any[]
+  leadId: string
+  onRefresh: () => void
+  showToast: (msg: string) => void
+  rms: any[]
+}) {
+  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ title: '', dueAt: '', priority: 'Medium', assignedTo: '' })
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    if (!form.title.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/crm/v2/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, ...form }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setShowAdd(false)
+      setForm({ title: '', dueAt: '', priority: 'Medium', assignedTo: '' })
+      showToast('Task added')
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error adding task')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const priorityCls: Record<string, string> = {
+    Low: 'bg-gray-100 text-gray-600',
+    Medium: 'bg-blue-100 text-blue-700',
+    High: 'bg-red-100 text-red-700',
+  }
+
+  return (
+    <div className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-900">Tasks ({tasks.length})</h3>
+        <button
+          onClick={() => setShowAdd(p => !p)}
+          className="text-xs text-[#422D83] hover:underline flex items-center gap-1"
+        >
+          <Plus className="w-3 h-3" /> Add Task
+        </button>
+      </div>
+
+      {tasks.length === 0 && !showAdd && (
+        <p className="text-xs text-gray-400 py-4 text-center">No pending tasks</p>
+      )}
+
+      {tasks.map((task: any) => (
+        <div key={task.id || task.task_id} className="border border-gray-200 rounded-xl p-3 bg-white">
+          <p className="text-sm font-medium text-gray-800">{task.title}</p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${priorityCls[task.priority] || 'bg-gray-100 text-gray-600'}`}>
+              {task.priority}
+            </span>
+            {task.assigned_to && (
+              <span className="text-xs text-gray-500">{task.assigned_to}</span>
+            )}
+            {task.due_at && (
+              <span className="text-xs text-gray-400 flex items-center gap-0.5">
+                <Calendar className="w-3 h-3" />
+                {formatDate(task.due_at)}
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {showAdd && (
+        <div className="border border-[#422D83]/20 rounded-xl p-4 space-y-3 bg-[#422D83]/5">
+          <p className="text-xs font-semibold text-[#422D83]">New Task</p>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Title <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              className={inputCls}
+              placeholder="Task description"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Due Date</label>
+              <input
+                type="date"
+                value={form.dueAt}
+                onChange={e => setForm(p => ({ ...p, dueAt: e.target.value }))}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-600 mb-1 block">Priority</label>
+              <div className="flex gap-1">
+                {['Low', 'Medium', 'High'].map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, priority: p }))}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${form.priority === p ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300'}`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">Assigned To</label>
+            <select
+              value={form.assignedTo}
+              onChange={e => setForm(p => ({ ...p, assignedTo: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="">Select RM…</option>
+              {rms.map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving || !form.title.trim()}
+              className="px-3 py-1.5 bg-[#422D83] text-white text-xs rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save Task
+            </button>
+            <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-lg hover:bg-gray-200">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Add Lead Modal ───────────────────────────────────────────────────────────
 
-function AddLeadModal({ onClose, onSuccess, user }: {
+function AddLeadModal({ onClose, onSuccess, user, editingLead }: {
   onClose: () => void
   onSuccess: (leadId: string) => void
   user: any
+  editingLead?: any
 }) {
   const [form, setForm] = useState({
     name: '', phone: '', countryCode: '+91', alternatePhone: '', email: '',
@@ -2257,7 +2488,30 @@ function AddLeadModal({ onClose, onSuccess, user }: {
       .catch(() => {})
   }, [])
 
+  React.useEffect(() => {
+    if (editingLead) {
+      const tags = editingLead.tags
+        ? editingLead.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+        : []
+      setForm(p => ({
+        ...p,
+        name: editingLead.name || '',
+        phone: editingLead.phone || '',
+        countryCode: editingLead.country_code || '+91',
+        alternatePhone: editingLead.alternate_phone || '',
+        email: editingLead.email || '',
+        source: editingLead.source || 'Direct',
+        subSource: editingLead.sub_source || '',
+        assignedRm: editingLead.assigned_rm || '',
+        customerLocation: editingLead.customer_location || '',
+        leadType: editingLead.lead_type || 'Buyer',
+        tags,
+      }))
+    }
+  }, [editingLead])
+
   async function checkDup() {
+    if (editingLead) return
     if (!form.phone || form.phone.length < 6) return
     setCheckingDup(true)
     try {
@@ -2297,12 +2551,31 @@ function AddLeadModal({ onClose, onSuccess, user }: {
           locationPreference: form.locationPreference, purpose: form.purpose,
         })
       }
-      const res = await fetch('/api/crm/v2/leads', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (data.duplicate && !forceAdd) { setDupWarning(data.existingLead); setSaving(false); return }
-      if (data.success) onSuccess(data.leadId)
+      let res: Response
+      let data: any
+      if (editingLead) {
+        res = await fetch(`/api/crm/v2/leads/${editingLead.lead_id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: form.name, phone: form.phone, countryCode: form.countryCode,
+            alternatePhone: form.alternatePhone, email: form.email,
+            source: form.source, subSource: form.subSource,
+            customerLocation: form.customerLocation,
+            leadType: form.leadType, tags: form.tags.join(','),
+            assignedRm: form.assignedRm,
+          }),
+        })
+        data = await res.json()
+        if (data.success) onSuccess(editingLead.lead_id)
+      } else {
+        res = await fetch('/api/crm/v2/leads', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        })
+        data = await res.json()
+        if (data.duplicate && !forceAdd) { setDupWarning(data.existingLead); setSaving(false); return }
+        if (data.success) onSuccess(data.leadId)
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -2316,7 +2589,7 @@ function AddLeadModal({ onClose, onSuccess, user }: {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b z-10">
-          <h2 className="font-bold text-gray-900">Add New Lead</h2>
+          <h2 className="font-bold text-gray-900">{editingLead ? 'Edit Lead' : 'Add New Lead'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1"><X className="w-5 h-5" /></button>
         </div>
 
@@ -2413,7 +2686,7 @@ function AddLeadModal({ onClose, onSuccess, user }: {
             </div>
           </div>
 
-          {['Buyer', 'Both'].includes(form.leadType) && (
+          {!editingLead && ['Buyer', 'Both'].includes(form.leadType) && (
             <>
               <div className="border-t border-gray-100 pt-4">
                 <h3 className="text-xs font-bold text-[#422D83] uppercase tracking-wider mb-4">Enquiry Info</h3>
@@ -2473,7 +2746,7 @@ function AddLeadModal({ onClose, onSuccess, user }: {
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
           <button type="button" onClick={handleSubmit} disabled={saving || !form.name.trim() || !form.phone.trim()} className="px-5 py-2 text-sm bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-2">
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            Save Lead
+            {editingLead ? 'Update Lead' : 'Save Lead'}
           </button>
         </div>
       </div>
