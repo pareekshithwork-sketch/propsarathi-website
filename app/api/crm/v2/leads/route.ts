@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
   const dateType = searchParams.get('dateType') || ''
   const dateFrom = searchParams.get('from') || ''
   const dateTo = searchParams.get('to') || ''
+  const applyDateFilter = dateFrom.length > 0 && dateTo.length > 0
   const ALLOWED_DATE_COLS: Record<string, string> = {
     created_at: 'l.created_at',
     updated_at: 'l.updated_at',
@@ -85,8 +86,8 @@ export async function GET(request: NextRequest) {
           OR (${incLoc}   AND l.customer_location ILIKE ${'%' + search + '%'})
           OR (${incRef}   AND l.referral_phone LIKE ${'%' + search + '%'})
         )
-        AND (${dateCol} = '' OR ${dateFrom} = '' OR l.created_at >= ${dateFrom}::date OR l.updated_at >= ${dateFrom}::date OR l.deleted_at >= ${dateFrom}::date)
-        AND (${dateCol} = '' OR ${dateTo}   = '' OR l.created_at <= (${dateTo}::date + '1 day'::interval) OR l.updated_at <= (${dateTo}::date + '1 day'::interval) OR l.deleted_at <= (${dateTo}::date + '1 day'::interval))
+        ${applyDateFilter ? sql`AND (${dateCol} = '' OR l.created_at >= ${dateFrom}::date OR l.updated_at >= ${dateFrom}::date OR l.deleted_at >= ${dateFrom}::date)
+        AND (${dateCol} = '' OR l.created_at <= (${dateTo}::date + '1 day'::interval) OR l.updated_at <= (${dateTo}::date + '1 day'::interval) OR l.deleted_at <= (${dateTo}::date + '1 day'::interval))` : sql``}
       GROUP BY l.id
       ORDER BY l.updated_at DESC
       LIMIT ${limit} OFFSET ${offset}
