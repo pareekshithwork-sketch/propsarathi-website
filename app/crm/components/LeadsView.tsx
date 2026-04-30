@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
   X, Check, Loader2, MoreHorizontal, Trash2, Calendar, FileText,
-  Activity, TrendingUp, Building2, Filter, Pencil,
+  Activity, TrendingUp, Building2, Filter, Pencil, ChevronRight, ChevronDown,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -148,6 +148,14 @@ function stageDisplayLabel(stage: string | null | undefined): string {
   return STAGE_LABEL[stage] || stage
 }
 
+function leadScore(stage: string | null | undefined): { label: string; cls: string } {
+  if (!stage || stage === 'New') return { label: 'Cold', cls: 'bg-blue-100 text-blue-700' }
+  if (stage === 'Callback') return { label: 'Warm', cls: 'bg-orange-100 text-orange-700' }
+  if (stage === 'Schedule Meeting' || stage === 'Schedule Site Visit') return { label: 'Hot', cls: 'bg-red-100 text-red-700' }
+  if (stage === 'Expression Of Interest' || stage === 'Book') return { label: 'Very Hot', cls: 'bg-purple-100 text-purple-700' }
+  return { label: 'Cold', cls: 'bg-blue-100 text-blue-700' }
+}
+
 // ─── Main LeadsView ────────────────────────────────────────────────────────────
 
 export function LeadsView({ v2Leads, user, onReload }: {
@@ -205,6 +213,13 @@ export function LeadsView({ v2Leads, user, onReload }: {
     propertyType: '', locationPref: '', minBudget: '', maxBudget: '', currency: 'INR', bedrooms: 'Any', purpose: '',
   })
   const [savingEnquiry, setSavingEnquiry] = useState(false)
+
+  // ── View mode ──
+  const [viewMode, setViewMode] = useState<'people' | 'enquiry'>('people')
+  const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set())
+  const [expandedLeadData, setExpandedLeadData] = useState<Record<string, any[]>>({})
+  const [enquiryViewData, setEnquiryViewData] = useState<any[]>([])
+  const [enquiryViewLoading, setEnquiryViewLoading] = useState(false)
 
   // ── Debounce search ──
   useEffect(() => {
@@ -340,6 +355,45 @@ export function LeadsView({ v2Leads, user, onReload }: {
     setDetail(null)
   }
 
+  async function loadEnquiryView() {
+    setEnquiryViewLoading(true)
+    try {
+      const res = await fetch('/api/crm/v2/enquiries?status=active&limit=500')
+      const data = await res.json()
+      if (data.success) setEnquiryViewData(data.enquiries || [])
+    } catch {}
+    setEnquiryViewLoading(false)
+  }
+
+  async function toggleExpand(e: React.MouseEvent, leadId: string) {
+    e.stopPropagation()
+    const next = new Set(expandedLeads)
+    if (next.has(leadId)) {
+      next.delete(leadId)
+      setExpandedLeads(next)
+      return
+    }
+    next.add(leadId)
+    setExpandedLeads(next)
+    if (!expandedLeadData[leadId]) {
+      try {
+        const res = await fetch(`/api/crm/v2/leads/${leadId}`)
+        const data = await res.json()
+        if (data.success) setExpandedLeadData(prev => ({ ...prev, [leadId]: data.enquiries || [] }))
+      } catch {}
+    }
+  }
+
+  function selectLeadById(leadId: string) {
+    const lead = v2Leads.find((l: any) => l.lead_id === leadId)
+    if (lead) selectLead(lead)
+  }
+
+  // ── Load enquiry view when mode changes ──
+  useEffect(() => {
+    if (viewMode === 'enquiry') loadEnquiryView()
+  }, [viewMode])
+
   async function handleStageChange() {
     if (!activeStageAction || !stageNotes.trim() || !selectedLead) return
     const needsLostReason = activeStageAction === 'Not Interested' || activeStageAction === 'Drop'
@@ -474,6 +528,21 @@ export function LeadsView({ v2Leads, user, onReload }: {
 
         {/* Top bar */}
         <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-shrink-0">
+          {/* People / Enquiries toggle */}
+          <div className="flex-shrink-0 flex rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setViewMode('people')}
+              className={`text-xs px-3 py-1.5 transition-colors ${viewMode === 'people' ? 'bg-[#422D83] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              People
+            </button>
+            <button
+              onClick={() => setViewMode('enquiry')}
+              className={`text-xs px-3 py-1.5 border-l border-gray-300 transition-colors ${viewMode === 'enquiry' ? 'bg-[#422D83] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            >
+              Enquiries
+            </button>
+          </div>
           <div className="flex gap-1 overflow-x-auto flex-1 scrollbar-hide">
             {STAGE_TABS.map(tab => (
               <button
@@ -634,15 +703,101 @@ export function LeadsView({ v2Leads, user, onReload }: {
 
         {/* Lead count */}
         <div className="px-4 py-1 text-xs text-gray-400 border-b border-gray-50 flex-shrink-0">
-          {filteredLeads.length} result{filteredLeads.length !== 1 ? 's' : ''}
-          {activeFilterCount > 0 && (
+          {viewMode === 'enquiry'
+            ? `${enquiryViewData.length} enquir${enquiryViewData.length !== 1 ? 'ies' : 'y'}`
+            : `${filteredLeads.length} result${filteredLeads.length !== 1 ? 's' : ''}`}
+          {viewMode === 'people' && activeFilterCount > 0 && (
             <span className="ml-1 text-[#422D83]">· {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active</span>
           )}
         </div>
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          {filteredLeads.length === 0 ? (
+          {viewMode === 'enquiry' ? (
+            enquiryViewLoading ? (
+              <div className="flex items-center justify-center h-40">
+                <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
+              </div>
+            ) : enquiryViewData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+                <Building2 className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">No active enquiries</p>
+              </div>
+            ) : (
+              <table className="w-full text-sm min-w-[700px]">
+                <thead className="bg-gray-900 text-white sticky top-0 z-10">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead Name</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Enquiry</th>
+                    <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Stage</th>
+                    <th className="px-3 py-3 w-36 text-left text-xs font-semibold uppercase tracking-wide">Sub Stage</th>
+                    <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Scheduled</th>
+                    <th className="px-3 py-3 w-28 text-left text-xs font-semibold uppercase tracking-wide">Assigned RM</th>
+                    <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Phone</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {enquiryViewData.map((enq: any) => {
+                    const phoneClean = (enq.lead_country_code || '+91').replace('+', '') + (enq.lead_phone || '')
+                    return (
+                      <tr
+                        key={enq.enquiry_id}
+                        className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => selectLeadById(enq.lead_id)}
+                      >
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-[#422D83]/10 text-[#422D83] text-xs font-bold flex items-center justify-center flex-shrink-0">
+                              {getInitials(enq.lead_name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 text-xs truncate">{enq.lead_name}</p>
+                              <p className="text-[10px] text-gray-400">{enq.lead_id}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <p className="text-xs font-mono text-gray-500">{enq.enquiry_id}</p>
+                          {enq.property_type && (
+                            <p className="text-[10px] text-gray-400">{enq.property_type}{enq.location_pref ? ` · ${enq.location_pref}` : ''}</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 w-32">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stageBadgeCls(enq.stage)}`}>
+                            {stageDisplayLabel(enq.stage || 'New')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 w-36">
+                          <p className="text-xs text-gray-500 truncate max-w-[130px]">{enq.sub_stage || '—'}</p>
+                        </td>
+                        <td className="px-3 py-3 w-32">
+                          <p className="text-xs text-gray-500">
+                            {enq.scheduled_at
+                              ? new Date(enq.scheduled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                              : '—'}
+                          </p>
+                        </td>
+                        <td className="px-3 py-3 w-28">
+                          <p className="text-xs text-gray-600 truncate max-w-[100px]">{enq.assigned_rm || 'Unassigned'}</p>
+                        </td>
+                        <td className="px-3 py-3 w-32">
+                          <div className="flex items-center gap-1.5">
+                            <a href={`tel:${enq.lead_country_code || '+91'}${enq.lead_phone}`} onClick={e => e.stopPropagation()} className="text-gray-400 hover:text-blue-600" title="Call">
+                              <Phone className="w-3.5 h-3.5" />
+                            </a>
+                            <span className="text-xs text-gray-600 truncate max-w-[48px]">{enq.lead_phone}</span>
+                            <a href={`https://wa.me/${phoneClean}?text=${encodeURIComponent(`Hi ${enq.lead_name}, this is PropSarathi.`)}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="WhatsApp">
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )
+          ) : filteredLeads.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-gray-400">
               <Users className="w-8 h-8 mb-2 opacity-30" />
               <p className="text-sm">No leads found</p>
@@ -678,88 +833,131 @@ export function LeadsView({ v2Leads, user, onReload }: {
                   const tags = lead.tags ? lead.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : []
                   const phoneClean = (lead.country_code || '+91').replace('+', '') + (lead.phone || '')
                   const waMsg = encodeURIComponent(`Hi ${lead.name}, this is ${user?.name || 'PropSarathi Team'} from PropSarathi.`)
+                  const score = leadScore(lead.latest_enquiry_stage)
+                  const isExpanded = expandedLeads.has(lead.lead_id)
 
                   return (
-                    <tr
-                      key={lead.lead_id}
-                      onClick={() => selectLead(lead)}
-                      className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
-                    >
-                      <td className="px-3 py-4 w-8" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedLeadIds.has(lead.lead_id)}
-                          onChange={e => {
-                            const next = new Set(selectedLeadIds)
-                            if (e.target.checked) next.add(lead.lead_id)
-                            else next.delete(lead.lead_id)
-                            setSelectedLeadIds(next)
-                          }}
-                          className="rounded"
-                        />
-                      </td>
-                      <td className="px-3 py-4">
-                        <div className="flex items-start gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-[#422D83]/10 text-[#422D83] text-xs font-bold flex items-center justify-center flex-shrink-0">
-                            {getInitials(lead.name)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-gray-900 text-sm leading-tight truncate">{lead.name}</p>
-                            <p className="text-xs text-gray-400">{lead.lead_id}</p>
-                            {tags.length > 0 && (
-                              <div className="flex gap-1 mt-0.5">
+                    <React.Fragment key={lead.lead_id}>
+                      <tr
+                        onClick={() => selectLead(lead)}
+                        className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                      >
+                        <td className="px-3 py-4 w-8" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedLeadIds.has(lead.lead_id)}
+                            onChange={e => {
+                              const next = new Set(selectedLeadIds)
+                              if (e.target.checked) next.add(lead.lead_id)
+                              else next.delete(lead.lead_id)
+                              setSelectedLeadIds(next)
+                            }}
+                            className="rounded"
+                          />
+                        </td>
+                        <td className="px-3 py-4">
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-[#422D83]/10 text-[#422D83] text-xs font-bold flex items-center justify-center flex-shrink-0">
+                              {getInitials(lead.name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-gray-900 text-sm leading-tight truncate">{lead.name}</p>
+                              <p className="text-xs text-gray-400">{lead.lead_id}</p>
+                              <div className="flex gap-1 mt-0.5 flex-wrap">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${score.cls}`}>{score.label}</span>
                                 {tags.slice(0, 2).map((tag: string) => (
                                   <span key={tag} className={`text-[10px] px-1.5 rounded-full font-medium ${TAG_COLORS[tag] || 'bg-gray-100 text-gray-600'}`}>{tag}</span>
                                 ))}
                               </div>
-                            )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 w-28">
-                        <p className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{lead.assigned_rm || 'Unassigned'}</p>
-                        <p className="text-xs text-gray-400">At {formatDate(lead.updated_at)}</p>
-                      </td>
-                      <td className="px-3 py-4 w-32">
-                        <div className="flex items-center gap-1.5">
-                          <a href={`tel:${lead.country_code || '+91'}${lead.phone}`} onClick={e => e.stopPropagation()} className="text-gray-400 hover:text-blue-600" title="Call">
-                            <Phone className="w-3.5 h-3.5" />
-                          </a>
-                          <span className="text-xs text-gray-600 truncate max-w-[56px]">{lead.phone}</span>
-                          <a href={`https://wa.me/${phoneClean}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="WhatsApp">
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </a>
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 w-36">
-                        <p className="text-xs text-gray-500 truncate max-w-[128px]">{lead.last_note || '—'}</p>
-                      </td>
-                      <td className="px-3 py-4 w-20">
-                        <p className="text-xs text-gray-600 truncate max-w-[72px]">{lead.source || '—'}</p>
-                      </td>
-                      <td className="px-3 py-4 w-32">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stageBadgeCls(lead.latest_enquiry_stage)}`}>
-                          {stageDisplayLabel(lead.latest_enquiry_stage)}
-                        </span>
-                        {lead.latest_enquiry_sub_stage && (
-                          <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[120px]">{lead.latest_enquiry_sub_stage}</p>
-                        )}
-                      </td>
-                      <td className="px-3 py-4 w-14" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-0.5">
-                          <button
-                            className="text-gray-300 hover:text-gray-600 p-1"
-                            title="Edit"
-                            onClick={() => selectLead(lead)}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button className="text-gray-300 hover:text-gray-600 p-1">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-3 py-4 w-28">
+                          <p className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{lead.assigned_rm || 'Unassigned'}</p>
+                          <p className="text-xs text-gray-400">At {formatDate(lead.updated_at)}</p>
+                        </td>
+                        <td className="px-3 py-4 w-32">
+                          <div className="flex items-center gap-1.5">
+                            <a href={`tel:${lead.country_code || '+91'}${lead.phone}`} onClick={e => e.stopPropagation()} className="text-gray-400 hover:text-blue-600" title="Call">
+                              <Phone className="w-3.5 h-3.5" />
+                            </a>
+                            <span className="text-xs text-gray-600 truncate max-w-[56px]">{lead.phone}</span>
+                            <a href={`https://wa.me/${phoneClean}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="WhatsApp">
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        </td>
+                        <td className="px-3 py-4 w-36">
+                          <p className="text-xs text-gray-500 truncate max-w-[128px]">{lead.last_note || '—'}</p>
+                        </td>
+                        <td className="px-3 py-4 w-20">
+                          <p className="text-xs text-gray-600 truncate max-w-[72px]">{lead.source || '—'}</p>
+                        </td>
+                        <td className="px-3 py-4 w-32">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stageBadgeCls(lead.latest_enquiry_stage)}`}>
+                            {stageDisplayLabel(lead.latest_enquiry_stage)}
+                          </span>
+                          {lead.latest_enquiry_sub_stage && (
+                            <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[120px]">{lead.latest_enquiry_sub_stage}</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-4 w-14" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              className="text-gray-300 hover:text-gray-600 p-1"
+                              title="Edit"
+                              onClick={() => selectLead(lead)}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              className={`p-1 transition-colors ${isExpanded ? 'text-[#422D83]' : 'text-gray-300 hover:text-[#422D83]'}`}
+                              title={isExpanded ? 'Collapse' : 'Show enquiries'}
+                              onClick={e => toggleExpand(e, lead.lead_id)}
+                            >
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="bg-[#422D83]/5 border-b border-[#422D83]/10">
+                          <td colSpan={8} className="px-6 py-3">
+                            {!expandedLeadData[lead.lead_id] ? (
+                              <div className="flex items-center gap-2 text-xs text-gray-400">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Loading enquiries…
+                              </div>
+                            ) : expandedLeadData[lead.lead_id].length === 0 ? (
+                              <p className="text-xs text-gray-400 italic">No enquiries yet</p>
+                            ) : (
+                              <div className="flex gap-3 flex-wrap">
+                                {expandedLeadData[lead.lead_id].map((enq: any) => (
+                                  <div
+                                    key={enq.enquiry_id}
+                                    className={`border rounded-lg px-3 py-2 min-w-[160px] max-w-[220px] bg-white ${enq.status === 'active' ? 'border-[#422D83]/30' : 'border-gray-200 opacity-60'}`}
+                                  >
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${stageBadgeCls(enq.stage)}`}>
+                                        {stageDisplayLabel(enq.stage || 'New')}
+                                      </span>
+                                      {enq.status === 'active' && (
+                                        <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">Active</span>
+                                      )}
+                                    </div>
+                                    {enq.property_type && (
+                                      <p className="text-xs text-gray-600 truncate">{enq.property_type}{enq.location_pref ? ` · ${enq.location_pref}` : ''}</p>
+                                    )}
+                                    {enq.sub_stage && <p className="text-[10px] text-gray-400 truncate">{enq.sub_stage}</p>}
+                                    <p className="text-[10px] text-gray-400 mt-0.5 font-mono">{enq.enquiry_id}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>

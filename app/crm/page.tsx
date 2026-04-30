@@ -72,8 +72,9 @@ export default function CRMPage() {
   const [leadForm, setLeadForm] = useState<Partial<Lead>>(EMPTY_LEAD_FORM)
   const [savingLead, setSavingLead] = useState(false)
 
-  // ── v2 leads ──
+  // ── v2 leads + dashboard ──
   const [v2Leads, setV2Leads] = useState<any[]>([])
+  const [v2Dashboard, setV2Dashboard] = useState<any>(null)
 
   // ── Data section ──
   const [selectedData, setSelectedData] = useState<DataRecord | null>(null)
@@ -130,17 +131,21 @@ export default function CRMPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [leadsRes, dataRes, statsRes, v2Res] = await Promise.all([
+      const [leadsRes, dataRes, statsRes, v2Res, dashRes] = await Promise.all([
         fetch("/api/crm/leads"),
         fetch("/api/crm/data"),
         fetch("/api/crm/stats"),
         fetch("/api/crm/v2/leads?limit=200"),
+        fetch("/api/crm/v2/dashboard"),
       ])
-      const [ld, dd, sd, v2d] = await Promise.all([leadsRes.json(), dataRes.json(), statsRes.json(), v2Res.json()])
+      const [ld, dd, sd, v2d, dashd] = await Promise.all([
+        leadsRes.json(), dataRes.json(), statsRes.json(), v2Res.json(), dashRes.json(),
+      ])
       if (ld.success) setLeads(ld.leads || [])
       if (dd.success) setDataRecords(dd.records || [])
       if (sd.success) setStats(sd.stats)
       if (v2d.leads) setV2Leads(v2d.leads)
+      if (dashd.success) setV2Dashboard(dashd)
     } catch (e) {
       console.error(e)
     } finally {
@@ -628,7 +633,7 @@ export default function CRMPage() {
         {/* Content */}
         <div className="flex-1 overflow-hidden">
           {view === "dashboard" && (
-            <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} />
+            <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} v2Dashboard={v2Dashboard} />
           )}
           {view === "leads" && (
             <LeadsView v2Leads={v2Leads} user={user} onReload={loadAll} />
