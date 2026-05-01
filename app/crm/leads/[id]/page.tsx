@@ -48,9 +48,7 @@ export default function LeadProfilePage() {
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
-    // Fetch user for display purposes only — do NOT redirect on failure
-    // (the lead API itself enforces auth and will return 401 if unauthenticated)
-    fetch('/api/crm/auth/me')
+    fetch('/api/crm/auth/me', { credentials: 'include' })
       .then(r => r.json())
       .then(d => { if (d.success) setUser(d.user) })
       .catch(() => {})
@@ -63,10 +61,10 @@ export default function LeadProfilePage() {
     setLoading(true)
     setNotFound(false)
     try {
-      const res = await fetch(`/api/crm/v2/leads/${leadId}`)
+      const res = await fetch(`/api/crm/v2/leads/${leadId}`, { credentials: 'include' })
       if (res.status === 401) { router.push('/crm'); return }
       const data = await res.json()
-      if (!data.success) { setNotFound(true); setLoading(false); return }
+      if (!data.success) { setNotFound(true); return }
       setLead(data.lead)
       setEnquiries(data.enquiries || [])
       setListings(data.listings || [])
