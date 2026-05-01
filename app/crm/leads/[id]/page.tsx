@@ -44,30 +44,35 @@ export default function LeadProfilePage() {
   const [listings, setListings] = useState<any[]>([])
   const [activity, setActivity] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
   const [user, setUser] = useState<any>(null)
 
   useEffect(() => {
+    // Fetch user for display purposes only — do NOT redirect on failure
+    // (the lead API itself enforces auth and will return 401 if unauthenticated)
     fetch('/api/crm/auth/me')
       .then(r => r.json())
-      .then(d => {
-        if (!d.success) { router.push('/crm'); return }
-        setUser(d.user)
-      })
+      .then(d => { if (d.success) setUser(d.user) })
+      .catch(() => {})
+
     loadLead()
   }, [leadId])
 
   async function loadLead() {
+    if (!leadId) return
     setLoading(true)
+    setNotFound(false)
     try {
       const res = await fetch(`/api/crm/v2/leads/${leadId}`)
+      if (res.status === 401) { router.push('/crm'); return }
       const data = await res.json()
-      if (!data.success) { router.push('/crm'); return }
+      if (!data.success) { setNotFound(true); setLoading(false); return }
       setLead(data.lead)
       setEnquiries(data.enquiries || [])
       setListings(data.listings || [])
       setActivity(data.activity || [])
     } catch {
-      router.push('/crm')
+      setNotFound(true)
     } finally {
       setLoading(false)
     }
@@ -81,7 +86,19 @@ export default function LeadProfilePage() {
     )
   }
 
-  if (!lead) return null
+  if (notFound || !lead) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-gray-400">
+        <p className="text-lg font-semibold">Lead not found</p>
+        <button
+          onClick={() => router.push('/crm')}
+          className="text-sm text-[#422D83] underline"
+        >
+          Back to CRM
+        </button>
+      </div>
+    )
+  }
 
   const phoneClean = (lead.country_code || '+91').replace('+', '') + lead.phone
 
