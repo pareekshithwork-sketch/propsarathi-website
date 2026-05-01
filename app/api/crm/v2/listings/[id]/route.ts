@@ -31,6 +31,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     await sql`
       UPDATE crm_listings SET
+        status             = COALESCE(${b.status            ?? null}, status),
         title              = COALESCE(${b.title             ?? null}, title),
         property_type      = COALESCE(${(b.propertyType ?? b.property_type) ?? null}, property_type),
         address            = COALESCE(${b.address           ?? null}, address),

@@ -22,29 +22,18 @@ export function CRMProjectsBrochure({ user }: { user: any }) {
 
   useEffect(() => {
     setLoading(true)
-    // Use the public /api/crm/projects endpoint (admin-restricted, so fallback to public projects API)
-    // Try the public projects API instead
-    fetch('/api/properties?featured=true&limit=50')
+    fetch('/api/crm/projects')
       .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.properties) {
-          setProjects(data.properties)
-        } else {
-          // Fallback: try the crm projects endpoint (will 403 for non-admin, handled gracefully)
-          return fetch('/api/crm/projects')
-            .then(r => r.ok ? r.json() : null)
-            .then(d => { if (d?.projects) setProjects(d.projects) })
-        }
-      })
+      .then(data => { if (data?.projects) setProjects(data.projects) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
   async function handleShare(project: any) {
-    const name = project.name || project.title || 'this project'
+    const name = project.name || 'this project'
     const city = project.city || ''
     const status = project.status || ''
-    const price = project.min_price || project.minPrice
+    const price = project.minPrice
     const currency = project.currency || 'INR'
     const priceStr = price
       ? `\nPrice from: ${currency === 'AED' ? 'AED ' : '₹'}${Number(price).toLocaleString('en-IN')}`
@@ -52,17 +41,16 @@ export function CRMProjectsBrochure({ user }: { user: any }) {
     const msg = `Hi! I wanted to share details about *${name}* in ${city}. ${status ? `Status: ${status}.` : ''}${priceStr}\n\nFor more details, contact PropSarathi.`
     try {
       await navigator.clipboard.writeText(msg)
-      setCopiedId(project.id || project.slug)
+      setCopiedId(project.id)
       setTimeout(() => setCopiedId(null), 2000)
     } catch {
-      // Fallback
       const ta = document.createElement('textarea')
       ta.value = msg
       document.body.appendChild(ta)
       ta.select()
       document.execCommand('copy')
       document.body.removeChild(ta)
-      setCopiedId(project.id || project.slug)
+      setCopiedId(project.id)
       setTimeout(() => setCopiedId(null), 2000)
     }
   }
@@ -95,18 +83,16 @@ export function CRMProjectsBrochure({ user }: { user: any }) {
       <div className="flex-1 overflow-auto p-5">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {projects.map((project: any) => {
-            const id = project.id || project.slug
-            const isCopied = copiedId === id
+            const isCopied = copiedId === project.id
             const statusCls = STATUS_BADGE[project.status] || 'bg-gray-100 text-gray-600'
-            const coverImg = project.cover_image || project.coverImage
 
             return (
-              <div key={id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
+              <div key={project.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-sm transition-shadow">
                 {/* Cover image */}
-                {coverImg ? (
+                {project.coverImage ? (
                   <div className="h-36 bg-gray-100 overflow-hidden">
                     <img
-                      src={coverImg}
+                      src={project.coverImage}
                       alt={project.name}
                       className="w-full h-full object-cover"
                       onError={(e: any) => { e.target.style.display = 'none' }}
@@ -121,7 +107,7 @@ export function CRMProjectsBrochure({ user }: { user: any }) {
                 {/* Content */}
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="font-bold text-gray-900 text-sm truncate">{project.name || project.title}</h3>
+                    <h3 className="font-bold text-gray-900 text-sm truncate">{project.name}</h3>
                     {project.status && (
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${statusCls}`}>
                         {project.status}
@@ -129,7 +115,7 @@ export function CRMProjectsBrochure({ user }: { user: any }) {
                     )}
                   </div>
 
-                  {(project.developer) && (
+                  {project.developer && (
                     <p className="text-xs text-gray-500 mb-1">by {project.developer}</p>
                   )}
 
@@ -141,15 +127,15 @@ export function CRMProjectsBrochure({ user }: { user: any }) {
                   )}
 
                   {/* Price */}
-                  {(project.min_price || project.minPrice) && (
+                  {project.minPrice > 0 && (
                     <p className="text-sm font-semibold text-[#422D83] mb-3">
                       {(project.currency || 'INR') === 'AED' ? 'AED ' : '₹'}
-                      {Number(project.min_price || project.minPrice).toLocaleString('en-IN')}
-                      {(project.max_price || project.maxPrice) && (
+                      {Number(project.minPrice).toLocaleString('en-IN')}
+                      {project.maxPrice > 0 && (
                         <span className="text-xs text-gray-400 font-normal">
                           {' – '}
                           {(project.currency || 'INR') === 'AED' ? 'AED ' : '₹'}
-                          {Number(project.max_price || project.maxPrice).toLocaleString('en-IN')}
+                          {Number(project.maxPrice).toLocaleString('en-IN')}
                         </span>
                       )}
                     </p>

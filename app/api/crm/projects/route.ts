@@ -9,12 +9,13 @@ function auth(req: NextRequest) {
   return verifyCRMToken(token)
 }
 
-// GET — list all projects (active + inactive) for CRM view
+// GET — list all projects for CRM view (admins see all; RMs see only active)
 export async function GET(req: NextRequest) {
   const user = auth(req)
-  if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   try {
-    const rows = await sql`SELECT * FROM projects ORDER BY is_featured DESC, created_at DESC`
+    const isAdmin = user.role === 'admin'
+    const rows = await sql`SELECT * FROM projects WHERE (${isAdmin} OR is_active = TRUE) ORDER BY is_featured DESC, created_at DESC`
     const projects = rows.map((r: any) => ({
       id: r.id,
       slug: r.slug,
