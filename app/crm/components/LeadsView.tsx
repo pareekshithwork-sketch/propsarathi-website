@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
@@ -233,6 +233,9 @@ export function LeadsView({ v2Leads, user, onReload }: {
     return new Set(DEFAULT_VISIBLE_COLUMNS)
   })
   const [showColumnPicker, setShowColumnPicker] = useState(false)
+  const datePickerRef = useRef<HTMLDivElement>(null)
+  const searchFieldsRef = useRef<HTMLDivElement>(null)
+  const columnPickerRef = useRef<HTMLDivElement>(null)
 
   // ── Bulk selection ──
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set())
@@ -260,6 +263,17 @@ export function LeadsView({ v2Leads, user, onReload }: {
   const [expandedLeadData, setExpandedLeadData] = useState<Record<string, any[]>>({})
   const [enquiryViewData, setEnquiryViewData] = useState<any[]>([])
   const [enquiryViewLoading, setEnquiryViewLoading] = useState(false)
+
+  // ── Outside-click: close dropdowns ──
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) setShowDatePicker(false)
+      if (searchFieldsRef.current && !searchFieldsRef.current.contains(e.target as Node)) setShowSearchFields(false)
+      if (columnPickerRef.current && !columnPickerRef.current.contains(e.target as Node)) setShowColumnPicker(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   // ── Debounce search ──
   useEffect(() => {
@@ -462,7 +476,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
             ))}
           </div>
           {/* Search with field selector */}
-          <div className="relative flex-shrink-0">
+          <div ref={searchFieldsRef} className="relative flex-shrink-0">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -482,7 +496,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
           </div>
 
           {/* Date type + range picker */}
-          <div className="flex items-center flex-shrink-0 relative">
+          <div ref={datePickerRef} className="flex items-center flex-shrink-0 relative">
             <select
               value={dateType}
               onChange={e => { setDateType(e.target.value); setDateFrom(''); setDateTo('') }}
@@ -544,7 +558,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
           </div>
 
           {/* Manage Columns */}
-          <div className="relative flex-shrink-0">
+          <div ref={columnPickerRef} className="relative flex-shrink-0">
             <button
               onClick={() => { setShowColumnPicker(p => !p); setShowDatePicker(false); setShowSearchFields(false) }}
               className={`text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-colors ${
