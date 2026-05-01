@@ -2,12 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const token = request.cookies.get('crm_token')?.value
   const user = verifyCRMToken(token || '')
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = params
+  const { id } = await params
   try {
     const [listing] = await sql`SELECT lead_id FROM crm_listings WHERE listing_id = ${id}`
     if (!listing) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 })

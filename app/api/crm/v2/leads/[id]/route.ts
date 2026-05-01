@@ -7,11 +7,11 @@ function auth(req: NextRequest) {
   return verifyCRMToken(token || '')
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = auth(request)
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = params
+  const { id } = await params
   try {
     const [lead] = await sql`SELECT * FROM crm_leads_v2 WHERE lead_id = ${id}`
     if (!lead) return NextResponse.json({ success: false, error: 'Lead not found' }, { status: 404 })
@@ -29,11 +29,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = auth(request)
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = params
+  const { id } = await params
   try {
     const body = await request.json()
 
@@ -89,7 +89,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = auth(request)
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
@@ -97,7 +97,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
   }
 
-  const { id } = params
+  const { id } = await params
   try {
     await sql`
       UPDATE crm_leads_v2

@@ -7,11 +7,11 @@ function auth(req: NextRequest) {
   return verifyCRMToken(token || '')
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = auth(request)
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = params
+  const { id } = await params
   try {
     const [listing] = await sql`SELECT * FROM crm_listings WHERE listing_id = ${id}`
     if (!listing) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 })
@@ -21,11 +21,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = auth(request)
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const { id } = params
+  const { id } = await params
   try {
     const b = await request.json()
 

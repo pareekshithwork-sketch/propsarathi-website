@@ -16,12 +16,12 @@ function timeAgo(date: Date): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export async function GET(request: NextRequest, { params }: { params: { leadId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ leadId: string }> }) {
   const token = request.cookies.get('crm_token')?.value
   const user = verifyCRMToken(token || '')
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const { leadId } = params
+  const { leadId } = await params
   try {
     const rows = await sql`
       SELECT
@@ -45,12 +45,12 @@ export async function GET(request: NextRequest, { params }: { params: { leadId: 
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { leadId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ leadId: string }> }) {
   const token = request.cookies.get('crm_token')?.value
   const user = verifyCRMToken(token || '')
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const { leadId } = params
+  const { leadId } = await params
   try {
     const body = await request.json()
     const { note } = body
