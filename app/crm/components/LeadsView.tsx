@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
   X, Check, Loader2, MoreHorizontal, Trash2, Calendar, FileText,
@@ -205,6 +206,8 @@ export function LeadsView({ v2Leads, user, onReload }: {
   user: any
   onReload: () => void
 }) {
+  const router = useRouter()
+
   // ── List filters ──
   const [stageTab, setStageTab] = useState('All')
   const [search, setSearch] = useState('')
@@ -239,38 +242,15 @@ export function LeadsView({ v2Leads, user, onReload }: {
   // ── RMs ──
   const [rms, setRms] = useState<any[]>([])
 
-  // ── Panel ──
+  // ── Panel (row highlighting only) ──
   const [selectedLead, setSelectedLead] = useState<any>(null)
-  const [detail, setDetail] = useState<any>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailTab, setDetailTab] = useState<'overview' | 'enquiries' | 'listings' | 'status' | 'history' | 'notes' | 'document' | 'tasks'>('overview')
 
   // ── Add Lead modal ──
   const [showAddLead, setShowAddLead] = useState(false)
   const [editingLead, setEditingLead] = useState<any>(null)
 
-  // ── RM Reassign ──
-  const [showReassign, setShowReassign] = useState(false)
-  const [reassignRm, setReassignRm] = useState('')
-  const [reassigning, setReassigning] = useState(false)
-
   // ── Toast ──
   const [toast, setToast] = useState('')
-
-  // ── Stage form ──
-  const [activeStageAction, setActiveStageAction] = useState('')
-  const [subStage, setSubStage] = useState('')
-  const [stageNotes, setStageNotes] = useState('')
-  const [stageScheduledAt, setStageScheduledAt] = useState('')
-  const [stageLostReason, setStageLostReason] = useState('')
-  const [bookingName, setBookingName] = useState('')
-  const [bookingDate, setBookingDate] = useState('')
-  const [agreementValue, setAgreementValue] = useState('')
-  const [savingStage, setSavingStage] = useState(false)
-
-  // ── Notes ──
-  const [noteText, setNoteText] = useState('')
-  const [savingNote, setSavingNote] = useState(false)
 
   // (enquiry form state lives inside EnquiriesTab)
 
@@ -398,35 +378,9 @@ export function LeadsView({ v2Leads, user, onReload }: {
     setShowBulkDeleteConfirm(false)
   }
 
-  async function loadDetail(leadId: string) {
-    setDetailLoading(true)
-    try {
-      const res = await fetch(`/api/crm/v2/leads/${leadId}`)
-      const data = await res.json()
-      if (data.success) setDetail(data)
-    } catch {}
-    setDetailLoading(false)
-  }
-
   function selectLead(lead: any) {
     setSelectedLead(lead)
-    setDetailTab('overview')
-    setActiveStageAction('')
-    setStageNotes('')
-    setSubStage('')
-    setStageScheduledAt('')
-    setStageLostReason('')
-    setNoteText('')
-    setShowReassign(false)
-    setReassignRm('')
-    loadDetail(lead.lead_id)
-  }
-
-  function closePanel() {
-    setSelectedLead(null)
-    setDetail(null)
-    setShowReassign(false)
-    setReassignRm('')
+    router.push('/crm/leads/' + lead.lead_id)
   }
 
   async function loadEnquiryView() {
@@ -468,129 +422,12 @@ export function LeadsView({ v2Leads, user, onReload }: {
     if (viewMode === 'enquiry') loadEnquiryView()
   }, [viewMode])
 
-  async function handleStageChange() {
-    if (!activeStageAction || !stageNotes.trim() || !selectedLead) return
-    const needsLostReason = activeStageAction === 'Not Interested' || activeStageAction === 'Drop'
-    if (needsLostReason && !stageLostReason) return
-
-    setSavingStage(true)
-    try {
-      let enquiryId = detail?.enquiries?.find((e: any) => e.status === 'active')?.enquiry_id
-
-      if (!enquiryId) {
-        const enqRes = await fetch('/api/crm/v2/enquiries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ leadId: selectedLead.lead_id }),
-        })
-        const enqData = await enqRes.json()
-        if (!enqData.success) throw new Error('Failed to create enquiry')
-        enquiryId = enqData.enquiryId
-      }
-
-      const body: any = {
-        stage: activeStageAction,
-        subStage,
-        notes: stageNotes,
-        scheduledAt: stageScheduledAt || undefined,
-        lostReason: stageLostReason || undefined,
-      }
-      if (activeStageAction === 'Book') {
-        body.bookingName = bookingName
-        body.bookingDate = bookingDate
-        body.agreementValue = agreementValue ? parseFloat(agreementValue) : undefined
-      }
-
-      const res = await fetch(`/api/crm/v2/enquiries/${enquiryId}/stage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.error || 'Stage change failed')
-
-      setActiveStageAction('')
-      setSubStage('')
-      setStageNotes('')
-      setStageScheduledAt('')
-      setStageLostReason('')
-      setBookingName('')
-      setBookingDate('')
-      setAgreementValue('')
-      showToast(`Stage updated to ${stageDisplayLabel(activeStageAction)}`)
-      await loadDetail(selectedLead.lead_id)
-      onReload()
-    } catch (e: any) {
-      showToast(e.message || 'Error saving stage')
-    } finally {
-      setSavingStage(false)
-    }
-  }
-
-  async function handleSaveNote() {
-    if (!noteText.trim() || !selectedLead) return
-    setSavingNote(true)
-    try {
-      const res = await fetch(`/api/crm/v2/activity/${selectedLead.lead_id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ note: noteText }),
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.error)
-      setNoteText('')
-      showToast('Note saved')
-      await loadDetail(selectedLead.lead_id)
-    } catch (e: any) {
-      showToast(e.message || 'Error saving note')
-    } finally {
-      setSavingNote(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!selectedLead || user?.role !== 'admin') return
-    const typed = prompt(`Type DELETE to confirm removing "${selectedLead.name}":`)
-    if (typed !== 'DELETE') return
-    try {
-      await fetch(`/api/crm/v2/leads/${selectedLead.lead_id}`, { method: 'DELETE' })
-      closePanel()
-      showToast('Lead deleted')
-      onReload()
-    } catch {}
-  }
-
-  async function handleReassign() {
-    if (!selectedLead || !reassignRm) return
-    setReassigning(true)
-    try {
-      const res = await fetch(`/api/crm/v2/leads/${selectedLead.lead_id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignedRm: reassignRm }),
-      })
-      const data = await res.json()
-      if (!data.success) throw new Error(data.error)
-      setShowReassign(false)
-      setReassignRm('')
-      setSelectedLead((prev: any) => prev ? { ...prev, assigned_rm: reassignRm } : prev)
-      showToast(`Lead reassigned to ${reassignRm}`)
-      await loadDetail(selectedLead.lead_id)
-      onReload()
-    } catch (e: any) {
-      showToast(e.message || 'Error reassigning lead')
-    } finally {
-      setReassigning(false)
-    }
-  }
-
-  const activeEnquiry = detail?.enquiries?.find((e: any) => e.status === 'active')
 
   return (
     <div className="flex h-full overflow-hidden">
 
       {/* ── Lead list ── */}
-      <div className={`${selectedLead ? 'w-[55%]' : 'flex-1'} flex flex-col border-r border-gray-200 bg-white overflow-hidden transition-all duration-200`}>
+      <div className="flex-1 flex flex-col bg-white overflow-hidden">
 
         {/* Top bar */}
         <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-shrink-0">
@@ -1217,184 +1054,6 @@ export function LeadsView({ v2Leads, user, onReload }: {
         </div>
       </div>
 
-      {/* ── Detail Panel (45%) ── */}
-      {selectedLead && (
-        <div className="w-[45%] flex flex-col overflow-hidden bg-white">
-
-          {/* Panel header */}
-          <div className="border-b border-gray-200 px-4 py-3 flex-shrink-0">
-            <div className="flex items-start gap-2">
-              <button onClick={closePanel} className="text-gray-400 hover:text-gray-600 mt-0.5 flex-shrink-0 p-0.5">
-                <X className="w-4 h-4" />
-              </button>
-              <div className="flex-1 min-w-0">
-                <h2 className="font-bold text-gray-900 text-lg leading-tight">{selectedLead.name}</h2>
-                <p className="text-xs text-gray-400 mt-0.5">{selectedLead.lead_id} · {selectedLead.assigned_rm || 'Unassigned'}</p>
-              </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <a
-                  href={`tel:${selectedLead.country_code || '+91'}${selectedLead.phone}`}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 text-white"
-                  title="Call"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                </a>
-                <a
-                  href={`https://wa.me/${(selectedLead.country_code || '+91').replace('+', '')}${selectedLead.phone}?text=${encodeURIComponent(`Hi ${selectedLead.name}, this is ${user?.name || 'PropSarathi Team'} from PropSarathi.`)}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-500 hover:bg-green-600 text-white"
-                  title="WhatsApp"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                </a>
-                {selectedLead.email && (
-                  <a
-                    href={`mailto:${selectedLead.email}`}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white"
-                    title="Email"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                  </a>
-                )}
-                <button
-                  onClick={() => { setShowReassign(p => !p); setReassignRm('') }}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${showReassign ? 'bg-[#422D83] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                  title="Reassign RM"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                </button>
-                {user?.role === 'admin' && (
-                  <button
-                    onClick={handleDelete}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500 hover:bg-red-600 text-white"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-            {showReassign && (
-              <div className="mt-2 ml-7 flex items-center gap-2">
-                <select
-                  value={reassignRm}
-                  onChange={e => setReassignRm(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-white"
-                >
-                  <option value="">Select RM…</option>
-                  {rms.map(rm => <option key={rm.id} value={rm.name}>{rm.name}</option>)}
-                </select>
-                <button
-                  onClick={handleReassign}
-                  disabled={!reassignRm || reassigning}
-                  className="text-xs px-3 py-1.5 bg-[#422D83] text-white rounded-lg disabled:opacity-50 flex items-center gap-1 flex-shrink-0"
-                >
-                  {reassigning ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                  Save
-                </button>
-                <button
-                  onClick={() => { setShowReassign(false); setReassignRm('') }}
-                  className="text-gray-400 hover:text-gray-600 flex-shrink-0"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Tabs — sticky */}
-          <div className="border-b border-gray-100 flex overflow-x-auto flex-shrink-0 scrollbar-hide sticky top-0 bg-white z-10">
-            {(['overview', 'enquiries', 'listings', 'status', 'history', 'notes', 'document', 'tasks'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setDetailTab(tab)}
-                className={`px-4 py-2.5 text-xs whitespace-nowrap border-b-2 transition-colors capitalize ${
-                  detailTab === tab
-                    ? 'border-[#422D83] text-[#422D83] font-semibold'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 font-medium'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab content */}
-          <div className="flex-1 overflow-y-auto">
-            {detailLoading ? (
-              <div className="flex items-center justify-center h-40">
-                <Loader2 className="w-6 h-6 animate-spin text-gray-300" />
-              </div>
-            ) : (
-              <>
-                {detailTab === 'overview' && <OverviewTab lead={detail?.lead || selectedLead} />}
-                {detailTab === 'enquiries' && (
-                  <EnquiriesTab
-                    key={selectedLead?.lead_id}
-                    enquiries={detail?.enquiries || []}
-                    leadId={selectedLead?.lead_id || ''}
-                    onRefresh={() => { if (selectedLead?.lead_id) loadDetail(selectedLead.lead_id) }}
-                    showToast={showToast}
-                  />
-                )}
-                {detailTab === 'listings' && (
-                  <ListingsTab
-                    key={selectedLead?.lead_id}
-                    listings={detail?.listings || []}
-                    leadId={selectedLead?.lead_id || ''}
-                    onRefresh={() => { if (selectedLead?.lead_id) loadDetail(selectedLead.lead_id) }}
-                    showToast={showToast}
-                  />
-                )}
-                {detailTab === 'status' && (
-                  <StatusTab
-                    activeEnquiry={activeEnquiry}
-                    activeStageAction={activeStageAction}
-                    setActiveStageAction={(s: string) => { setActiveStageAction(s); setSubStage(''); setStageNotes(''); setStageLostReason('') }}
-                    subStage={subStage}
-                    setSubStage={setSubStage}
-                    stageNotes={stageNotes}
-                    setStageNotes={setStageNotes}
-                    stageScheduledAt={stageScheduledAt}
-                    setStageScheduledAt={setStageScheduledAt}
-                    stageLostReason={stageLostReason}
-                    setStageLostReason={setStageLostReason}
-                    bookingName={bookingName}
-                    setBookingName={setBookingName}
-                    bookingDate={bookingDate}
-                    setBookingDate={setBookingDate}
-                    agreementValue={agreementValue}
-                    setAgreementValue={setAgreementValue}
-                    savingStage={savingStage}
-                    onSave={handleStageChange}
-                  />
-                )}
-                {detailTab === 'history' && <HistoryTab activity={detail?.activity || []} />}
-                {detailTab === 'notes' && (
-                  <NotesTab
-                    activity={detail?.activity || []}
-                    noteText={noteText}
-                    setNoteText={setNoteText}
-                    savingNote={savingNote}
-                    onSave={handleSaveNote}
-                  />
-                )}
-                {detailTab === 'document' && <DocumentTab />}
-                {detailTab === 'tasks' && (
-                  <TasksTab
-                    key={selectedLead?.lead_id}
-                    tasks={detail?.tasks || []}
-                    leadId={selectedLead?.lead_id || ''}
-                    onRefresh={() => { if (selectedLead?.lead_id) loadDetail(selectedLead.lead_id) }}
-                    showToast={showToast}
-                    rms={rms}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Add Lead Modal */}
       {showAddLead && (
@@ -1408,7 +1067,6 @@ export function LeadsView({ v2Leads, user, onReload }: {
             onReload()
             if (editingLead) {
               showToast('Lead updated')
-              if (selectedLead?.lead_id === editingLead.lead_id) loadDetail(editingLead.lead_id)
             } else {
               showToast(`Lead ${leadId} created`)
             }

@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
-  LayoutDashboard, Users, Database, ChevronLeft,
+  LayoutDashboard, Users, Database, ChevronLeft, ChevronDown, ChevronRight,
   Plus, Search, LogOut, X,
-  MapPin, Loader2, Building2, User, Menu,
+  MapPin, Loader2, Building2, User, Menu, Home,
   XCircle, Activity, BarChart3,
   RefreshCw, Layers, BookOpen,
 } from "lucide-react"
@@ -22,6 +22,10 @@ import { DataView } from './components/DataView'
 import { ProjectsView } from './components/ProjectsView'
 import { BlogView } from './components/BlogView'
 import { TeamView } from './components/TeamView'
+import { EnquiriesView } from './components/EnquiriesView'
+import { ListingsView } from './components/ListingsView'
+import { PropertiesView } from './components/PropertiesView'
+import { CRMProjectsBrochure } from './components/CRMProjectsBrochure'
 
 // ─── Main CRM Page ────────────────────────────────────────────────────────────
 
@@ -35,7 +39,8 @@ export default function CRMPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   // ── View ──
-  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team">("dashboard")
+  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team" | "enquiries" | "listings" | "properties">("dashboard")
+  const [leadsExpanded, setLeadsExpanded] = useState(true)
   const [clientsList, setClientsList] = useState<any[]>([])
   const [referralsList, setReferralsList] = useState<any[]>([])
   const [docViewsList, setDocViewsList] = useState<any[]>([])
@@ -114,7 +119,7 @@ export default function CRMPage() {
 
   // ── Load projects when projects tab opened ──
   useEffect(() => {
-    if (view === "projects" && user?.role === "admin") {
+    if (view === "projects") {
       loadProjects()
     }
     if (view === "clients" && user?.role === "admin") {
@@ -529,40 +534,160 @@ export default function CRMPage() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-4 space-y-1 px-2">
-          {[
-            { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-            { id: "leads", label: "Leads", icon: Users, count: v2Leads.filter((l: any) => !l.is_deleted).length },
-            { id: "pipeline", label: "Pipeline", icon: Layers },
-            { id: "reports", label: "Reports", icon: BarChart3 },
-            { id: "data", label: "Data", icon: Database, count: dataRecords.length },
-            ...(user?.role === "admin" ? [{ id: "clients", label: "Clients", icon: User }] : []),
-            ...(user?.role === "admin" ? [{ id: "referrals", label: "Referrals", icon: Activity }] : []),
-            ...(user?.role === "admin" ? [{ id: "projects", label: "Projects", icon: Building2, count: crmProjects.filter((p: any) => p.isActive).length }] : []),
-            ...(user?.role === "admin" ? [{ id: "blog", label: "Blog", icon: BookOpen }] : []),
-            ...(user?.role === "admin" ? [{ id: "team", label: "Team", icon: Users }] : []),
-            { id: "map", label: "Map", icon: MapPin },
-          ].map(item => (
-            <button
-              key={item.id}
-              onClick={() => setView(item.id as typeof view)}
-              className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${
-                view === item.id ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"
-              } ${!sidebarOpen && "justify-center"}`}
-            >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {sidebarOpen && (
-                <>
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.count !== undefined && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${view === item.id ? "bg-white/20" : "bg-white/10"}`}>
-                      {item.count}
-                    </span>
-                  )}
-                </>
-              )}
-            </button>
-          ))}
+        <nav className="flex-1 py-4 space-y-0.5 px-2 overflow-y-auto">
+
+          {/* Dashboard */}
+          <button
+            onClick={() => setView("dashboard")}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "dashboard" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span className="flex-1 text-left">Dashboard</span>}
+          </button>
+
+          {/* Leads parent */}
+          <button
+            onClick={() => { setView("leads"); setLeadsExpanded(p => !p) }}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${["leads","enquiries","listings"].includes(view) ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <Users className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && (
+              <>
+                <span className="flex-1 text-left">Leads</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${["leads","enquiries","listings"].includes(view) ? "bg-white/20" : "bg-white/10"}`}>
+                  {v2Leads.filter((l: any) => !l.is_deleted).length}
+                </span>
+                {leadsExpanded ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 ml-1" /> : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 ml-1" />}
+              </>
+            )}
+          </button>
+
+          {/* Sub-items: Enquiries + Listings */}
+          {sidebarOpen && leadsExpanded && (
+            <>
+              <button
+                onClick={() => setView("enquiries")}
+                className={`w-full flex items-center gap-2 pl-8 pr-2 py-1.5 rounded-lg text-xs transition-colors ${view === "enquiries" ? "bg-[#422D83] text-white" : "text-white/50 hover:text-white hover:bg-white/10"}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
+                <span>Enquiries</span>
+              </button>
+              <button
+                onClick={() => setView("listings")}
+                className={`w-full flex items-center gap-2 pl-8 pr-2 py-1.5 rounded-lg text-xs transition-colors ${view === "listings" ? "bg-[#422D83] text-white" : "text-white/50 hover:text-white hover:bg-white/10"}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
+                <span>Listings</span>
+              </button>
+            </>
+          )}
+
+          {/* Pipeline */}
+          <button
+            onClick={() => setView("pipeline")}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "pipeline" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <Layers className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span className="flex-1 text-left">Pipeline</span>}
+          </button>
+
+          {/* Properties (all users) */}
+          <button
+            onClick={() => setView("properties")}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "properties" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <Home className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span className="flex-1 text-left">Properties</span>}
+          </button>
+
+          {/* Projects (all users) */}
+          <button
+            onClick={() => setView("projects")}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "projects" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <Building2 className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && (
+              <>
+                <span className="flex-1 text-left">Projects</span>
+                {crmProjects.filter((p: any) => p.isActive).length > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${view === "projects" ? "bg-white/20" : "bg-white/10"}`}>
+                    {crmProjects.filter((p: any) => p.isActive).length}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+
+          {/* Reports */}
+          <button
+            onClick={() => setView("reports")}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "reports" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <BarChart3 className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span className="flex-1 text-left">Reports</span>}
+          </button>
+
+          {/* Data */}
+          <button
+            onClick={() => setView("data")}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "data" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <Database className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && (
+              <>
+                <span className="flex-1 text-left">Data</span>
+                {dataRecords.length > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${view === "data" ? "bg-white/20" : "bg-white/10"}`}>
+                    {dataRecords.length}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+
+          {/* Admin-only items */}
+          {user?.role === "admin" && (
+            <>
+              <button
+                onClick={() => setView("clients")}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "clients" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+              >
+                <User className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="flex-1 text-left">Clients</span>}
+              </button>
+              <button
+                onClick={() => setView("referrals")}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "referrals" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+              >
+                <Activity className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="flex-1 text-left">Referrals</span>}
+              </button>
+              <button
+                onClick={() => setView("blog")}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "blog" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+              >
+                <BookOpen className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="flex-1 text-left">Blog</span>}
+              </button>
+              <button
+                onClick={() => setView("team")}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "team" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+              >
+                <Users className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="flex-1 text-left">Team</span>}
+              </button>
+            </>
+          )}
+
+          {/* Map */}
+          <button
+            onClick={() => setView("map")}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "map" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+          >
+            <MapPin className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span className="flex-1 text-left">Map</span>}
+          </button>
+
         </nav>
 
         {/* User */}
@@ -647,15 +772,22 @@ export default function CRMPage() {
           {view === "reports" && (
             <ReportsView leads={leads.filter(l => !l.isDeleted)} />
           )}
-          {view === "projects" && user?.role === "admin" && (
-            <ProjectsView
-              projects={crmProjects}
-              loading={projectsLoading}
-              onRefresh={loadProjects}
-              onUpdate={(id: number, data: any) => fetch(`/api/crm/projects/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
-              onDelete={(id: number) => fetch(`/api/crm/projects/${id}`, { method: 'DELETE' }).then(loadProjects)}
-              onCreate={(data: any) => fetch('/api/crm/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
-            />
+          {view === "enquiries" && <EnquiriesView user={user} />}
+          {view === "listings" && <ListingsView user={user} />}
+          {view === "properties" && <PropertiesView user={user} />}
+          {view === "projects" && (
+            user?.role === "admin"
+              ? (
+                <ProjectsView
+                  projects={crmProjects}
+                  loading={projectsLoading}
+                  onRefresh={loadProjects}
+                  onUpdate={(id: number, data: any) => fetch(`/api/crm/projects/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
+                  onDelete={(id: number) => fetch(`/api/crm/projects/${id}`, { method: 'DELETE' }).then(loadProjects)}
+                  onCreate={(data: any) => fetch('/api/crm/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
+                />
+              )
+              : <CRMProjectsBrochure user={user} />
           )}
           {view === "blog" && user?.role === "admin" && (
             <BlogView />
