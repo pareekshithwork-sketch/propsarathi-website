@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
-  LayoutDashboard, Users, Database, ChevronLeft, ChevronDown, ChevronRight,
+  LayoutDashboard, Users, Database, ChevronLeft,
   Plus, Search, LogOut, X,
   MapPin, Loader2, Building2, User, Menu, Home,
   XCircle, Activity, BarChart3,
-  RefreshCw, Layers, BookOpen,
+  RefreshCw, BookOpen,
 } from "lucide-react"
 import MapEditor from "@/components/MapEditor"
 import { LogoCompact } from "@/components/Logo"
@@ -16,7 +16,6 @@ import { FormField, Input, Select, Textarea } from './components/shared'
 import { DashboardView } from './components/DashboardView'
 import { LeadsView } from './components/LeadsView'
 import { LeadModal } from './components/LeadModal'
-import { PipelineView } from './components/PipelineView'
 import { ReportsView } from './components/ReportsView'
 import { DataView } from './components/DataView'
 import { ProjectsView } from './components/ProjectsView'
@@ -39,8 +38,7 @@ export default function CRMPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   // ── View ──
-  const [view, setView] = useState<"dashboard" | "leads" | "pipeline" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team" | "enquiries" | "listings" | "properties">("dashboard")
-  const [leadsExpanded, setLeadsExpanded] = useState(true)
+  const [view, setView] = useState<"dashboard" | "leads" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team" | "enquiries" | "listings" | "properties">("dashboard")
   const [clientsList, setClientsList] = useState<any[]>([])
   const [referralsList, setReferralsList] = useState<any[]>([])
   const [docViewsList, setDocViewsList] = useState<any[]>([])
@@ -547,7 +545,7 @@ export default function CRMPage() {
 
           {/* Leads parent */}
           <button
-            onClick={() => { setView("leads"); setLeadsExpanded(p => !p) }}
+            onClick={() => setView("leads")}
             className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${["leads","enquiries","listings"].includes(view) ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <Users className="w-5 h-5 flex-shrink-0" />
@@ -557,13 +555,12 @@ export default function CRMPage() {
                 <span className={`text-xs px-1.5 py-0.5 rounded-full ${["leads","enquiries","listings"].includes(view) ? "bg-white/20" : "bg-white/10"}`}>
                   {v2Leads.filter((l: any) => !l.is_deleted).length}
                 </span>
-                {leadsExpanded ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 ml-1" /> : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 ml-1" />}
               </>
             )}
           </button>
 
           {/* Sub-items: Enquiries + Listings */}
-          {sidebarOpen && leadsExpanded && (
+          {sidebarOpen && (
             <>
               <button
                 onClick={() => setView("enquiries")}
@@ -581,15 +578,6 @@ export default function CRMPage() {
               </button>
             </>
           )}
-
-          {/* Pipeline */}
-          <button
-            onClick={() => setView("pipeline")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "pipeline" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
-          >
-            <Layers className="w-5 h-5 flex-shrink-0" />
-            {sidebarOpen && <span className="flex-1 text-left">Pipeline</span>}
-          </button>
 
           {/* Properties (all users) */}
           <button
@@ -649,20 +637,6 @@ export default function CRMPage() {
           {user?.role === "admin" && (
             <>
               <button
-                onClick={() => setView("clients")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "clients" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
-              >
-                <User className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="flex-1 text-left">Clients</span>}
-              </button>
-              <button
-                onClick={() => setView("referrals")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "referrals" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
-              >
-                <Activity className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="flex-1 text-left">Referrals</span>}
-              </button>
-              <button
                 onClick={() => setView("blog")}
                 className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "blog" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
               >
@@ -675,6 +649,23 @@ export default function CRMPage() {
               >
                 <Users className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="flex-1 text-left">Team</span>}
+              </button>
+              {sidebarOpen
+                ? <p className="px-2 pt-3 pb-1 text-[10px] font-semibold text-white/30 uppercase tracking-wider">Admin</p>
+                : <div className="border-t border-white/10 mx-2 my-1" />}
+              <button
+                onClick={() => setView("clients")}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "clients" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+              >
+                <User className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="flex-1 text-left">Clients</span>}
+              </button>
+              <button
+                onClick={() => setView("referrals")}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "referrals" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+              >
+                <Activity className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && <span className="flex-1 text-left">Referrals</span>}
               </button>
             </>
           )}
@@ -762,12 +753,6 @@ export default function CRMPage() {
           )}
           {view === "leads" && (
             <LeadsView v2Leads={v2Leads} user={user} onReload={loadAll} />
-          )}
-          {view === "pipeline" && (
-            <PipelineView leads={leads.filter(l => !l.isDeleted)} onStatusChange={async (leadId, newStatus) => {
-              await fetch(`/api/crm/leads/${leadId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) })
-              setLeads(prev => prev.map(l => l.leadId === leadId ? { ...l, status: newStatus } : l))
-            }} />
           )}
           {view === "reports" && (
             <ReportsView leads={leads.filter(l => !l.isDeleted)} />

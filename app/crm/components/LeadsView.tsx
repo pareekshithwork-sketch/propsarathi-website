@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
   X, Check, Loader2, MoreHorizontal, Trash2, Calendar, FileText,
@@ -206,8 +205,6 @@ export function LeadsView({ v2Leads, user, onReload }: {
   user: any
   onReload: () => void
 }) {
-  const router = useRouter()
-
   // ── List filters ──
   const [stageTab, setStageTab] = useState('All')
   const [search, setSearch] = useState('')
@@ -247,6 +244,11 @@ export function LeadsView({ v2Leads, user, onReload }: {
 
   // ── Panel (row highlighting only) ──
   const [selectedLead, setSelectedLead] = useState<any>(null)
+
+  // ── Profile side panel ──
+  const [profileLead, setProfileLead] = useState<any>(null)
+  const [profileDetail, setProfileDetail] = useState<any>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
 
   // ── Add Lead modal ──
   const [showAddLead, setShowAddLead] = useState(false)
@@ -394,7 +396,14 @@ export function LeadsView({ v2Leads, user, onReload }: {
 
   function selectLead(lead: any) {
     setSelectedLead(lead)
-    router.push('/crm/leads/' + lead.lead_id)
+    setProfileLead(lead)
+    setProfileDetail(null)
+    setProfileLoading(true)
+    fetch(`/api/crm/v2/leads/${lead.lead_id}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => { if (data.success) setProfileDetail(data) })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false))
   }
 
   async function loadEnquiryView() {
@@ -441,7 +450,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
     <div className="flex h-full overflow-hidden">
 
       {/* ── Lead list ── */}
-      <div className="flex-1 flex flex-col bg-white overflow-hidden">
+      <div className={`${profileLead ? 'w-[60%]' : 'flex-1'} flex flex-col bg-white overflow-hidden`}>
 
         {/* Top bar */}
         <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-shrink-0">
@@ -923,6 +932,14 @@ export function LeadsView({ v2Leads, user, onReload }: {
                               {getInitials(lead.name)}
                             </div>
                             <div className="min-w-0">
+                              <div className="flex items-center gap-1 mb-0.5">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${(lead.active_enquiry_count || 0) > 0 ? 'bg-[#422D83]/10 text-[#422D83]' : 'bg-gray-100 text-gray-400'}`}>
+                                  E{lead.active_enquiry_count || 0}
+                                </span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${(lead.active_listings || 0) > 0 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-400'}`}>
+                                  L{lead.active_listings || 0}
+                                </span>
+                              </div>
                               <p className="font-bold text-gray-900 text-sm leading-tight truncate">{lead.name}</p>
                               <p className="text-xs text-gray-400">{lead.lead_id}</p>
                               <div className="flex gap-1 mt-0.5 flex-wrap">
@@ -1068,6 +1085,176 @@ export function LeadsView({ v2Leads, user, onReload }: {
         </div>
       </div>
 
+      {/* ── Profile side panel ── */}
+      {profileLead && (
+        <div className="w-[40%] border-l border-gray-200 flex flex-col overflow-hidden bg-white">
+          {/* Panel header */}
+          <div className="flex-shrink-0 border-b border-gray-200 px-4 py-3 flex items-center gap-2">
+            <button
+              onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null) }}
+              className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 text-sm truncate">{profileLead.name}</p>
+              <p className="text-[10px] text-gray-400">{profileLead.lead_id}</p>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <a
+                href={`tel:${profileLead.country_code || '+91'}${profileLead.phone}`}
+                onClick={e => e.stopPropagation()}
+                className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center"
+                title="Call"
+              >
+                <Phone className="w-3.5 h-3.5" />
+              </a>
+              <a
+                href={`https://wa.me/${(profileLead.country_code || '+91').replace('+', '')}${profileLead.phone}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-7 h-7 rounded-lg bg-green-500 hover:bg-green-600 text-white flex items-center justify-center"
+                title="WhatsApp"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+              </a>
+              {profileLead.email && (
+                <a
+                  href={`mailto:${profileLead.email}`}
+                  className="w-7 h-7 rounded-lg bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center"
+                  title="Email"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                </a>
+              )}
+              <button
+                onClick={() => { setEditingLead(profileLead); setShowAddLead(true) }}
+                className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center"
+                title="Edit lead"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Panel body */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+            {profileLoading && (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-300" />
+              </div>
+            )}
+
+            {!profileLoading && (
+              <>
+                {/* Contact Details */}
+                <section>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Contact Details</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                    {[
+                      ['Primary Phone', `${profileLead.country_code || '+91'} ${profileLead.phone}`],
+                      ['Alternate Phone', profileLead.alternate_phone],
+                      ['Email', profileLead.email],
+                      ['Location', profileLead.customer_location],
+                      ['Lead Type', profileLead.lead_type],
+                      ['Source', profileLead.source],
+                      ['Sub Source', profileLead.sub_source],
+                      ['Assigned RM', profileLead.assigned_rm || 'Unassigned'],
+                      ['Tags', profileLead.tags],
+                      ['Created', profileLead.created_at ? new Date(profileLead.created_at).toLocaleDateString('en-IN') : undefined],
+                    ].filter(([, v]) => v).map(([label, value]) => (
+                      <div key={label as string}>
+                        <p className="text-[10px] text-gray-400">{label}</p>
+                        <p className="text-xs text-gray-800 font-medium truncate">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* Enquiries */}
+                <section>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                    Enquiries ({profileDetail?.enquiries?.length ?? 0})
+                  </p>
+                  {(!profileDetail?.enquiries || profileDetail.enquiries.length === 0) && (
+                    <p className="text-xs text-gray-400 italic">No enquiries yet</p>
+                  )}
+                  <div className="space-y-1.5">
+                    {(profileDetail?.enquiries || []).map((enq: any) => (
+                      <div key={enq.enquiry_id} className="flex items-center justify-between gap-2 py-1 border-b border-gray-50 last:border-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                          <span className="text-[10px] font-mono text-gray-400">{enq.enquiry_id}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${stageBadgeCls(enq.stage)}`}>
+                            {stageDisplayLabel(enq.stage || 'New')}
+                          </span>
+                          {enq.property_type && <span className="text-[10px] text-gray-500">{enq.property_type}</span>}
+                          {enq.scheduled_at && (
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(enq.scheduled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${enq.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {enq.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* Listings */}
+                <section>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                    Listings ({profileDetail?.listings?.length ?? 0})
+                  </p>
+                  {(!profileDetail?.listings || profileDetail.listings.length === 0) && (
+                    <p className="text-xs text-gray-400 italic">No listings yet</p>
+                  )}
+                  <div className="space-y-1.5">
+                    {(profileDetail?.listings || []).map((ls: any) => (
+                      <div key={ls.listing_id} className="flex items-center justify-between gap-2 py-1 border-b border-gray-50 last:border-0">
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[10px] font-mono text-gray-400 mr-1.5">{ls.listing_id}</span>
+                          <span className="text-xs font-medium text-gray-800 truncate">{ls.title || 'Untitled'}</span>
+                          {ls.asking_price > 0 && (
+                            <p className="text-[10px] text-gray-500">
+                              {ls.currency === 'AED' ? 'AED ' : '₹'}{Number(ls.asking_price).toLocaleString('en-IN')}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 flex-shrink-0">{ls.status || 'pending'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* Activity */}
+                <section>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Activity History</p>
+                  {(!profileDetail?.activity || profileDetail.activity.length === 0) && (
+                    <p className="text-xs text-gray-400 italic">No activity yet</p>
+                  )}
+                  <div className="space-y-2">
+                    {(profileDetail?.activity || []).slice(0, 10).map((item: any, i: number) => (
+                      <div key={item.id || i} className="py-1 border-b border-gray-50 last:border-0">
+                        <p className="text-xs font-medium text-gray-800">{item.title}</p>
+                        {item.description && (
+                          <p className="text-[10px] text-gray-500 italic truncate">"{item.description}"</p>
+                        )}
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {item.performed_by} ·{' '}
+                          {item.created_at ? new Date(item.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add Lead Modal */}
       {showAddLead && (
@@ -1077,10 +1264,19 @@ export function LeadsView({ v2Leads, user, onReload }: {
           onClose={() => { setShowAddLead(false); setEditingLead(null) }}
           onSuccess={(leadId: string) => {
             setShowAddLead(false)
+            const wasEditing = editingLead
             setEditingLead(null)
             onReload()
-            if (editingLead) {
+            if (wasEditing) {
               showToast('Lead updated')
+              if (profileLead && wasEditing.lead_id === profileLead.lead_id) {
+                setProfileLoading(true)
+                fetch(`/api/crm/v2/leads/${profileLead.lead_id}`, { credentials: 'include' })
+                  .then(r => r.json())
+                  .then(data => { if (data.success) { setProfileDetail(data); setProfileLead(data.lead) } })
+                  .catch(() => {})
+                  .finally(() => setProfileLoading(false))
+              }
             } else {
               showToast(`Lead ${leadId} created`)
             }

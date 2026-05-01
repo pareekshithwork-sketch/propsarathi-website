@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
         l.*,
         COUNT(DISTINCT e.id) FILTER (WHERE e.status = 'active') AS active_enquiry_count,
         COUNT(DISTINCT ls.id) AS listing_count,
+        (SELECT COUNT(*)::int FROM crm_listings ls2
+         WHERE ls2.lead_id = l.lead_id
+         AND ls2.status NOT IN ('sold')) AS active_listings,
         (SELECT e2.stage FROM crm_enquiries e2
          WHERE e2.lead_id = l.lead_id AND e2.status = 'active'
          ORDER BY e2.updated_at DESC LIMIT 1) AS latest_enquiry_stage,
