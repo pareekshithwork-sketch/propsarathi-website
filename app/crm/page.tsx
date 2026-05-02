@@ -6,7 +6,7 @@ import {
   Plus, Search, LogOut, X,
   MapPin, Loader2, Building2, User, Menu, Home,
   XCircle, Activity, BarChart3,
-  RefreshCw, BookOpen,
+  RefreshCw, BookOpen, Download,
 } from "lucide-react"
 import MapEditor from "@/components/MapEditor"
 import { LogoCompact } from "@/components/Logo"
@@ -25,6 +25,7 @@ import { EnquiriesView } from './components/EnquiriesView'
 import { ListingsView } from './components/ListingsView'
 import { PropertiesView } from './components/PropertiesView'
 import { CRMProjectsBrochure } from './components/CRMProjectsBrochure'
+import { BulkImportModal } from './components/BulkImportModal'
 
 // ─── Main CRM Page ────────────────────────────────────────────────────────────
 
@@ -92,6 +93,10 @@ export default function CRMPage() {
   // ── Notes ──
   const [addNoteText, setAddNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
+
+  // ── Bulk import ──
+  const [showBulkImport, setShowBulkImport] = useState(false)
+  const [bulkImportType, setBulkImportType] = useState<'leads' | 'data'>('leads')
 
   // ── Auth check on mount ──
   useEffect(() => {
@@ -367,23 +372,26 @@ export default function CRMPage() {
     if (!selectedData) return
     setSavingData(true)
     try {
-      const res = await fetch("/api/crm/leads", {
+      const res = await fetch("/api/crm/v2/leads", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...convertForm,
-          clientName: selectedData.name,
+          name: selectedData.name,
           phone: selectedData.phone,
-          countryCode: selectedData.countryCode,
+          countryCode: selectedData.countryCode || "+91",
           email: selectedData.email,
-          source: selectedData.source,
-          status: "New",
+          source: selectedData.source || "Direct",
+          assignedRm: convertForm.assignedRM,
+          leadType: "Buyer",
+          forceInsert: true,
         }),
       })
       const d = await res.json()
       if (d.success) {
         await fetch(`/api/crm/data/${selectedData.dataId}`, {
           method: "PUT",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ converted: true, convertedLeadId: d.leadId }),
         })
@@ -518,7 +526,9 @@ export default function CRMPage() {
         <div className={`flex items-center gap-2 p-4 border-b border-white/10 ${!sidebarOpen && "justify-center"}`}>
           {sidebarOpen ? (
             <>
-              <LogoCompact href="" dark={true} className="flex-1 min-w-0" />
+              <div className="bg-white rounded-lg p-1 flex items-center justify-center flex-1 min-w-0">
+                <LogoCompact href="" />
+              </div>
               <span className="text-xs text-blue-400 font-medium flex-shrink-0">CRM</span>
               <button onClick={() => setSidebarOpen(false)} className="text-white/40 hover:text-white flex-shrink-0">
                 <ChevronLeft className="w-4 h-4" />
@@ -537,7 +547,7 @@ export default function CRMPage() {
           {/* Dashboard */}
           <button
             onClick={() => setView("dashboard")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "dashboard" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "dashboard" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && <span className="flex-1 text-left">Dashboard</span>}
@@ -546,7 +556,7 @@ export default function CRMPage() {
           {/* Leads parent */}
           <button
             onClick={() => setView("leads")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${["leads","enquiries","listings"].includes(view) ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${["leads","enquiries","listings"].includes(view) ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <Users className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && (
@@ -582,7 +592,7 @@ export default function CRMPage() {
           {/* Properties (all users) */}
           <button
             onClick={() => setView("properties")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "properties" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "properties" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <Home className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && <span className="flex-1 text-left">Properties</span>}
@@ -591,7 +601,7 @@ export default function CRMPage() {
           {/* Projects (all users) */}
           <button
             onClick={() => setView("projects")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "projects" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "projects" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <Building2 className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && (
@@ -609,7 +619,7 @@ export default function CRMPage() {
           {/* Reports */}
           <button
             onClick={() => setView("reports")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "reports" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "reports" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <BarChart3 className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && <span className="flex-1 text-left">Reports</span>}
@@ -618,7 +628,7 @@ export default function CRMPage() {
           {/* Data */}
           <button
             onClick={() => setView("data")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "data" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "data" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <Database className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && (
@@ -638,14 +648,14 @@ export default function CRMPage() {
             <>
               <button
                 onClick={() => setView("blog")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "blog" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "blog" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
               >
                 <BookOpen className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="flex-1 text-left">Blog</span>}
               </button>
               <button
                 onClick={() => setView("team")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "team" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "team" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
               >
                 <Users className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="flex-1 text-left">Team</span>}
@@ -655,14 +665,14 @@ export default function CRMPage() {
                 : <div className="border-t border-white/10 mx-2 my-1" />}
               <button
                 onClick={() => setView("clients")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "clients" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "clients" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
               >
                 <User className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="flex-1 text-left">Clients</span>}
               </button>
               <button
                 onClick={() => setView("referrals")}
-                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "referrals" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+                className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "referrals" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
               >
                 <Activity className="w-5 h-5 flex-shrink-0" />
                 {sidebarOpen && <span className="flex-1 text-left">Referrals</span>}
@@ -673,7 +683,7 @@ export default function CRMPage() {
           {/* Map */}
           <button
             onClick={() => setView("map")}
-            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "map" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "map" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
           >
             <MapPin className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && <span className="flex-1 text-left">Map</span>}
@@ -716,29 +726,45 @@ export default function CRMPage() {
           <h1 className="font-semibold text-gray-900 text-base capitalize">{view}</h1>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            {view !== "leads" && (
-              <>
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search…"
-                    value={view === "data" ? dataSearch : search}
-                    onChange={e => view === "data" ? setDataSearch(e.target.value) : setSearch(e.target.value)}
-                    className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
-                  />
-                </div>
-                <button
-                  onClick={() => {
-                    if (view === "data") setShowAddData(true)
-                    else openAddLead()
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  {view === "data" ? "Add Data" : "Add Lead"}
-                </button>
-              </>
+            {/* Search — only for data view (others have built-in search) */}
+            {view === "data" && (
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search…"
+                  value={dataSearch}
+                  onChange={e => setDataSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 w-52"
+                />
+              </div>
+            )}
+            {/* Import button — leads & data */}
+            {(view === "leads" || view === "data") && (
+              <button
+                onClick={() => { setBulkImportType(view === "data" ? "data" : "leads"); setShowBulkImport(true) }}
+                className="text-gray-600 border border-gray-300 hover:border-[#422D83] hover:text-[#422D83] px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
+              >
+                <Download className="w-4 h-4" />
+                Import
+              </button>
+            )}
+            {/* Context-sensitive add button */}
+            {view === "leads" && (
+              <button
+                onClick={() => setShowAddLead(true)}
+                className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> Add Lead
+              </button>
+            )}
+            {view === "data" && (
+              <button
+                onClick={() => setShowAddData(true)}
+                className="bg-[#422D83] hover:bg-[#321f6b] text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5"
+              >
+                <Plus className="w-4 h-4" /> Add Data
+              </button>
             )}
             <button onClick={loadAll} className="text-gray-400 hover:text-gray-600 p-1.5" title="Refresh">
               <RefreshCw className="w-4 h-4" />
@@ -755,7 +781,7 @@ export default function CRMPage() {
             <LeadsView v2Leads={v2Leads} user={user} onReload={loadAll} />
           )}
           {view === "reports" && (
-            <ReportsView leads={leads.filter(l => !l.isDeleted)} />
+            <ReportsView v2Leads={v2Leads} />
           )}
           {view === "enquiries" && <EnquiriesView user={user} />}
           {view === "listings" && <ListingsView user={user} />}
@@ -930,6 +956,15 @@ export default function CRMPage() {
           savingLead={savingLead}
           onSave={saveLead}
           onClose={() => setShowAddLead(false)}
+        />
+      )}
+
+      {/* Bulk Import Modal */}
+      {showBulkImport && (
+        <BulkImportModal
+          importType={bulkImportType}
+          onClose={() => setShowBulkImport(false)}
+          onDone={() => { setShowBulkImport(false); loadAll() }}
         />
       )}
 

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { verifyCRMToken } from '@/lib/crmAuth'
-import { getCRMData, updateCRMData, addCRMLead, addCRMHistory, getRecordHistory } from '@/lib/crmSheets'
+import sql from '@/lib/db'
 
 function auth(request: NextRequest) {
   const token = request.cookies.get('crm_token')?.value
@@ -14,13 +14,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const { id } = await params
-    const records = await getCRMData()
-    const record = records.find(d => d.dataId === id)
+    const [record] = await sql`SELECT * FROM crm_data WHERE data_id = ${id}`
     if (!record) return NextResponse.json({ success: false, message: 'Record not found' }, { status: 404 })
-    const history = await getRecordHistory(id)
-    return NextResponse.json({ success: true, record, history })
-  } catch (error) {
-    return NextResponse.json({ success: false, message: 'Failed to fetch record' }, { status: 500 })
+    return NextResponse.json({ success: true, record })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, message: e.message }, { status: 500 })
   }
 }
 
@@ -32,43 +30,58 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params
     const body = await request.json()
 
-    // Convert to Lead
-    if (body.action === 'convert') {
-      const records = await getCRMData()
-      const record = records.find(d => d.dataId === id)
+    // Convert to v2 lead
+    if (body.action === 'convert' || (body.converted && body.convertedLeadId)) {
+      if (body.converted && body.convertedLeadId) {
+        await sql`
+          UPDATE crm_data
+          SET converted = TRUE, converted_lead_id = ${body.convertedLeadId}, updated_at = NOW()
+          WHERE data_id = ${id}
+        `
+        return NextResponse.json({ success: true })
+      }
+
+      // Full convert flow — create v2 lead then mark converted
+      const [record] = await sql`SELECT * FROM crm_data WHERE data_id = ${id}`
       if (!record) return NextResponse.json({ success: false, message: 'Record not found' }, { status: 404 })
 
-      const leadId = `LEAD-${Date.now()}`
-      await addCRMLead({
-        leadId, source: 'Data Conversion',
-        clientName: record.name, phone: record.phone,
-        countryCode: record.countryCode, email: record.email,
-        city: body.city || '', propertyType: body.propertyType || '',
-        budget: body.budget || '', assignedRM: body.assignedRM || '',
-        status: 'New', notes: record.notes || '',
+      const leadRes = await fetch(new URL('/api/crm/v2/leads', request.url).toString(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Cookie': request.headers.get('cookie') || '' },
+        body: JSON.stringify({
+          name: record.name,
+          phone: record.phone,
+          email: record.email,
+          countryCode: record.country_code || '+91',
+          source: record.source || 'Direct',
+          assignedRm: body.assignedRM || '',
+          leadType: 'Buyer',
+          forceInsert: true,
+        }),
       })
-      await updateCRMData(id, { converted: 'Yes', convertedLeadId: leadId, status: 'Qualified' })
-      await addCRMHistory({
-        recordId: id, recordType: 'data',
-        action: `Converted to Lead ${leadId}`, changedBy: user.name,
-        oldStatus: record.status, newStatus: 'Qualified', notes: '',
-      })
-      return NextResponse.json({ success: true, leadId })
+      const leadData = await leadRes.json()
+      if (!leadData.success) return NextResponse.json({ success: false, message: leadData.error || 'Failed to create lead' }, { status: 500 })
+
+      await sql`
+        UPDATE crm_data
+        SET converted = TRUE, converted_lead_id = ${leadData.leadId}, updated_at = NOW()
+        WHERE data_id = ${id}
+      `
+      return NextResponse.json({ success: true, leadId: leadData.leadId })
     }
 
-    const records = await getCRMData()
-    const current = records.find(d => d.dataId === id)
-    const oldStatus = current?.status || ''
-    await updateCRMData(id, body)
-    if (body.status && body.status !== oldStatus) {
-      await addCRMHistory({
-        recordId: id, recordType: 'data',
-        action: `Status changed to ${body.status}`, changedBy: user.name,
-        oldStatus, newStatus: body.status, notes: body.notes || '',
-      })
-    }
+    // Regular update
+    const b = body
+    await sql`
+      UPDATE crm_data SET
+        status      = COALESCE(${b.status      ?? null}, status),
+        notes       = COALESCE(${b.notes       ?? null}, notes),
+        assigned_to = COALESCE(${b.assignedTo  ?? null}, assigned_to),
+        updated_at  = NOW()
+      WHERE data_id = ${id}
+    `
     return NextResponse.json({ success: true })
-  } catch (error) {
-    return NextResponse.json({ success: false, message: 'Failed to update record' }, { status: 500 })
+  } catch (e: any) {
+    return NextResponse.json({ success: false, message: e.message }, { status: 500 })
   }
 }

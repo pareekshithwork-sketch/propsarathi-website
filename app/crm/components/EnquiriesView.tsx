@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   RefreshCw, Loader2, Phone, MessageCircle, Check, X,
   Calendar, Search, ChevronDown,
@@ -91,7 +91,7 @@ function formatScheduled(dateStr: string | null | undefined): { text: string; cl
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function EnquiriesView({ user }: { user: any }) {
-  const [enquiries, setEnquiries] = useState<any[]>([])
+  const [rawEnquiries, setRawEnquiries] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [stageFilter, setStageFilter] = useState('')
   const [overdue, setOverdue] = useState(false)
@@ -105,6 +105,22 @@ export function EnquiriesView({ user }: { user: any }) {
   const [stageSaving, setStageSaving] = useState(false)
   const [toast, setToast] = useState('')
 
+  const enquiries = useMemo(() => {
+    if (!stageFilter) return rawEnquiries
+    return rawEnquiries.filter((e: any) =>
+      stageFilter === 'New' ? (!e.stage || e.stage === 'New') : e.stage === stageFilter
+    )
+  }, [rawEnquiries, stageFilter])
+
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    rawEnquiries.forEach((e: any) => {
+      const s = e.stage || 'New'
+      counts[s] = (counts[s] || 0) + 1
+    })
+    return counts
+  }, [rawEnquiries])
+
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
 
   function showToast(msg: string) {
@@ -116,7 +132,6 @@ export function EnquiriesView({ user }: { user: any }) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ status: 'all', limit: '500' })
-      if (stageFilter) params.set('stage', stageFilter)
       if (assignedTo) params.set('assignedTo', assignedTo)
       if (search) params.set('search', search)
       if (overdue) params.set('overdue', 'true')
@@ -145,9 +160,6 @@ export function EnquiriesView({ user }: { user: any }) {
           const q = search.toLowerCase()
           list = list.filter((e: any) => (e.lead_name || '').toLowerCase().includes(q))
         }
-        if (stageFilter) {
-          list = list.filter((e: any) => (stageFilter === 'New' ? (!e.stage || e.stage === 'New') : e.stage === stageFilter))
-        }
         if (assignedTo) {
           list = list.filter((e: any) => e.assigned_rm === assignedTo)
         }
@@ -163,14 +175,14 @@ export function EnquiriesView({ user }: { user: any }) {
           return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
         })
 
-        setEnquiries(list)
+        setRawEnquiries(list)
       }
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [stageFilter, assignedTo, search, overdue, dueToday, sort])
+  }, [assignedTo, search, overdue, dueToday, sort])
 
   useEffect(() => { loadEnquiries() }, [loadEnquiries])
 
@@ -223,19 +235,22 @@ export function EnquiriesView({ user }: { user: any }) {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Stage pills */}
           <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-            {STAGE_TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setStageFilter(tab.id)}
-                className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0 font-medium transition-colors ${
-                  stageFilter === tab.id
-                    ? 'bg-[#422D83] text-white'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:border-[#422D83]'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {STAGE_TABS.map(tab => {
+              const count = tab.id === '' ? rawEnquiries.length : (stageCounts[tab.id] || 0)
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setStageFilter(tab.id)}
+                  className={`text-xs px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0 font-medium transition-colors ${
+                    stageFilter === tab.id
+                      ? 'bg-[#422D83] text-white'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-[#422D83]'
+                  }`}
+                >
+                  {tab.label}{count > 0 ? ` (${count})` : ''}
+                </button>
+              )
+            })}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap ml-auto">

@@ -1,38 +1,74 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import type { Lead } from '../types'
-import { PIPELINE_STAGES } from '../constants'
 
-export function ReportsView({ leads }: { leads: Lead[] }) {
+const PURPLE = ['#422D83', '#5b40b0', '#7d65cc', '#9e8ada', '#c0b4e9']
+
+const STAGE_ORDER = ['New', 'Callback', 'Schedule Meeting', 'Schedule Site Visit', 'Expression Of Interest', 'Book', 'Not Interested', 'Drop']
+const STAGE_LABEL: Record<string, string> = {
+  'Schedule Meeting': 'Meeting',
+  'Schedule Site Visit': 'Site Visit',
+  'Expression Of Interest': 'EOI',
+  'Book': 'Booked',
+  'Not Interested': 'Not Int.',
+}
+
+function sl(stage: string) { return STAGE_LABEL[stage] || stage }
+
+export function ReportsView({ v2Leads }: { v2Leads: any[] }) {
+  const leads = useMemo(() => (v2Leads || []).filter((l: any) => !l.is_deleted), [v2Leads])
+
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay())
 
-  const leadsThisMonth = leads.filter(l => new Date(l.createdAt) >= startOfMonth)
-  const leadsThisWeek = leads.filter(l => new Date(l.createdAt) >= startOfWeek)
+  const leadsThisMonth = useMemo(() => leads.filter(l => new Date(l.created_at) >= startOfMonth), [leads])
+  const leadsThisWeek  = useMemo(() => leads.filter(l => new Date(l.created_at) >= startOfWeek), [leads])
 
-  const byStatus = PIPELINE_STAGES.map(s => ({ name: s === 'Expression of Interest' ? 'EOI' : s, count: leads.filter(l => l.status === s).length })).filter(s => s.count > 0)
+  const byStage = useMemo(() => STAGE_ORDER.map(s => ({
+    name: sl(s),
+    count: leads.filter(l => {
+      const stage = l.latest_enquiry_stage
+      if (s === 'New') return !stage || stage === 'New'
+      return stage === s
+    }).length,
+  })).filter(s => s.count > 0), [leads])
 
-  const rmMap: Record<string, number> = {}
-  leads.forEach(l => { const rm = l.assignedRM || 'Unassigned'; rmMap[rm] = (rmMap[rm] || 0) + 1 })
-  const byRM = Object.entries(rmMap).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }))
+  const byRM = useMemo(() => {
+    const rmMap: Record<string, number> = {}
+    leads.forEach(l => { const rm = l.assigned_rm || 'Unassigned'; rmMap[rm] = (rmMap[rm] || 0) + 1 })
+    return Object.entries(rmMap).sort((a, b) => b[1] - a[1]).map(([name, count]) => ({ name, count }))
+  }, [leads])
 
-  const srcMap: Record<string, number> = {}
-  leads.forEach(l => { const s = l.source || 'Unknown'; srcMap[s] = (srcMap[s] || 0) + 1 })
-  const bySource = Object.entries(srcMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count }))
+  const bySource = useMemo(() => {
+    const srcMap: Record<string, number> = {}
+    leads.forEach(l => { const s = l.source || 'Unknown'; srcMap[s] = (srcMap[s] || 0) + 1 })
+    return Object.entries(srcMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, count]) => ({ name, count }))
+  }, [leads])
 
-  const PURPLE = ['#422D83','#5b40b0','#7d65cc','#9e8ada','#c0b4e9']
+  const bookings = useMemo(() => leads.filter(l => l.latest_enquiry_stage === 'Book'), [leads])
+
+  const totalEnquiries = useMemo(() => leads.reduce((s, l) => s + (Number(l.active_enquiry_count) || 0), 0), [leads])
+
+  const enquiryByStage = useMemo(() => STAGE_ORDER.slice(0, 6).map(s => ({
+    name: sl(s),
+    count: leads.filter(l => {
+      const stage = l.latest_enquiry_stage
+      if (s === 'New') return !stage || stage === 'New'
+      return stage === s
+    }).length,
+  })), [leads])
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-50 p-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+    <div className="h-full overflow-y-auto bg-gray-50 p-4 space-y-4">
+      {/* KPI row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Total Leads', val: leads.length, bg: 'bg-[#422D83]' },
           { label: 'This Month', val: leadsThisMonth.length, bg: 'bg-indigo-500' },
           { label: 'This Week', val: leadsThisWeek.length, bg: 'bg-blue-500' },
-          { label: 'Booked', val: leads.filter(l => l.status === 'Booked').length, bg: 'bg-violet-600' },
+          { label: 'Booked', val: bookings.length, bg: 'bg-violet-600' },
         ].map(c => (
           <div key={c.label} className={`rounded-xl p-4 text-white ${c.bg}`}>
             <p className="text-2xl font-bold">{c.val}</p>
@@ -41,21 +77,43 @@ export function ReportsView({ leads }: { leads: Lead[] }) {
         ))}
       </div>
 
+      {/* Enquiry funnel */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-1">Enquiry Stage Funnel</h3>
+        <p className="text-xs text-gray-400 mb-3">{totalEnquiries} active enquiries across {leads.length} leads</p>
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+          {enquiryByStage.map((s, i) => (
+            <div key={s.name} className="text-center">
+              <div className="rounded-lg py-3" style={{ backgroundColor: PURPLE[i % PURPLE.length] + '20' }}>
+                <p className="text-xl font-bold" style={{ color: PURPLE[i % PURPLE.length] }}>{s.count}</p>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">{s.name}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Leads by Stage */}
         <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads by Status</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={byStatus} layout="vertical" margin={{ left: 8, right: 16 }}>
-              <XAxis type="number" tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} />
-              <Tooltip formatter={(v: any) => [v, 'Leads']} />
-              <Bar dataKey="count" radius={[0,4,4,0]}>
-                {byStatus.map((_, i) => <Cell key={i} fill={PURPLE[i % PURPLE.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads by Stage</h3>
+          {byStage.length === 0
+            ? <p className="text-xs text-gray-400 text-center py-8">No data yet</p>
+            : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={byStage} layout="vertical" margin={{ left: 8, right: 16 }}>
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={72} />
+                  <Tooltip formatter={(v: any) => [v, 'Leads']} />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                    {byStage.map((_, i) => <Cell key={i} fill={PURPLE[i % PURPLE.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
         </div>
 
+        {/* Leads by RM */}
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads by RM</h3>
           <div className="space-y-2.5 max-h-48 overflow-y-auto">
@@ -72,25 +130,31 @@ export function ReportsView({ leads }: { leads: Lead[] }) {
           </div>
         </div>
 
+        {/* Leads by Source */}
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Leads by Source</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={bySource} margin={{ left: 0, right: 16, bottom: 48 }}>
-              <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: any) => [v, 'Leads']} />
-              <Bar dataKey="count" radius={[4,4,0,0]}>
-                {bySource.map((_, i) => <Cell key={i} fill={PURPLE[i % PURPLE.length]} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {bySource.length === 0
+            ? <p className="text-xs text-gray-400 text-center py-8">No data yet</p>
+            : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={bySource} margin={{ left: 0, right: 16, bottom: 48 }}>
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: any) => [v, 'Leads']} />
+                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                    {bySource.map((_, i) => <Cell key={i} fill={PURPLE[i % PURPLE.length]} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
         </div>
 
+        {/* Booking conversion by RM */}
         <div className="bg-white rounded-xl border border-gray-100 p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Booking Conversion by RM</h3>
           <div className="space-y-2.5">
             {byRM.map(r => {
-              const booked = leads.filter(l => l.assignedRM === r.name && l.status === 'Booked').length
+              const booked = leads.filter(l => l.assigned_rm === r.name && l.latest_enquiry_stage === 'Book').length
               const pct = r.count > 0 ? Math.round(booked / r.count * 100) : 0
               return (
                 <div key={r.name} className="flex items-center gap-2">
