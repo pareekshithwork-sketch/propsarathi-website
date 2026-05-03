@@ -111,7 +111,7 @@ export function EnquiriesView({ user, highlightId, onClearHighlight }: {
     setExpandedId(highlightId)
     const t = setTimeout(() => { if (onClearHighlight) onClearHighlight() }, 100)
     return () => clearTimeout(t)
-  }, [highlightId])
+  }, [highlightId, onClearHighlight])
   const [stageForm, setStageForm] = useState({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
   const [stageSaving, setStageSaving] = useState(false)
   const [toast, setToast] = useState('')

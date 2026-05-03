@@ -2877,6 +2877,22 @@ function TasksTab({ tasks, leadId, onRefresh, showToast, rms }: {
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ title: '', dueAt: '', priority: 'Medium', assignedTo: '' })
   const [saving, setSaving] = useState(false)
+  const [completing, setCompleting] = useState<string | null>(null)
+
+  async function handleComplete(taskId: string) {
+    setCompleting(taskId)
+    try {
+      const res = await fetch(`/api/crm/v2/tasks?id=${taskId}`, { method: 'PATCH', credentials: 'include' })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      showToast('Task marked done')
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error')
+    } finally {
+      setCompleting(null)
+    }
+  }
 
   async function handleSave() {
     if (!form.title.trim()) return
@@ -2922,25 +2938,36 @@ function TasksTab({ tasks, leadId, onRefresh, showToast, rms }: {
         <p className="text-xs text-gray-400 py-4 text-center">No pending tasks</p>
       )}
 
-      {tasks.map((task: any) => (
-        <div key={task.id || task.task_id} className="border border-gray-200 rounded-xl p-3 bg-white">
-          <p className="text-sm font-medium text-gray-800">{task.title}</p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${priorityCls[task.priority] || 'bg-gray-100 text-gray-600'}`}>
-              {task.priority}
-            </span>
-            {task.assigned_to && (
-              <span className="text-xs text-gray-500">{task.assigned_to}</span>
-            )}
-            {task.due_at && (
-              <span className="text-xs text-gray-400 flex items-center gap-0.5">
-                <Calendar className="w-3 h-3" />
-                {formatDate(task.due_at)}
-              </span>
-            )}
+      {tasks.map((task: any) => {
+        const tid = task.id || task.task_id
+        return (
+          <div key={tid} className="border border-gray-200 rounded-xl p-3 bg-white flex items-start gap-2">
+            <button
+              onClick={() => handleComplete(String(tid))}
+              disabled={completing === String(tid)}
+              className="mt-0.5 w-4 h-4 rounded border-2 border-gray-300 hover:border-[#422D83] flex-shrink-0 transition-colors disabled:opacity-50"
+              title="Mark done"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-800">{task.title}</p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${priorityCls[task.priority] || 'bg-gray-100 text-gray-600'}`}>
+                  {task.priority}
+                </span>
+                {task.assigned_to && (
+                  <span className="text-xs text-gray-500">{task.assigned_to}</span>
+                )}
+                {task.due_at && (
+                  <span className="text-xs text-gray-400 flex items-center gap-0.5">
+                    <Calendar className="w-3 h-3" />
+                    {formatDate(task.due_at)}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       {showAdd && (
         <div className="border border-[#422D83]/20 rounded-xl p-4 space-y-3 bg-[#422D83]/5">

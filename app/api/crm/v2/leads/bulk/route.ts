@@ -18,10 +18,15 @@ export async function PATCH(request: NextRequest) {
     let updated = 0
 
     if (action === 'reassign') {
+      let rmId: number | null = null
+      if (value) {
+        const [rmRow] = await sql`SELECT id FROM crm_users WHERE name = ${value} AND is_active = TRUE LIMIT 1`
+        if (rmRow) rmId = rmRow.id
+      }
       for (const leadId of leadIds) {
         await sql`
           UPDATE crm_leads_v2
-          SET assigned_rm = ${value}, updated_at = NOW()
+          SET assigned_rm = ${value}, assigned_rm_id = ${rmId}, updated_at = NOW()
           WHERE lead_id = ${leadId}
         `
         await sql`

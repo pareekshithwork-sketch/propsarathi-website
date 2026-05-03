@@ -18,16 +18,12 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(searchParams.get('offset') || '0')
 
   // Date range params
-  const dateType = searchParams.get('dateType') || ''
+  const dateType = searchParams.get('dateType') || 'created_at'
   const dateFrom = searchParams.get('from') || ''
   const dateTo = searchParams.get('to') || ''
   const applyDateFilter = dateFrom.length > 0 && dateTo.length > 0
-  const ALLOWED_DATE_COLS: Record<string, string> = {
-    created_at: 'l.created_at',
-    updated_at: 'l.updated_at',
-    deleted_at: 'l.deleted_at',
-  }
-  const dateCol = ALLOWED_DATE_COLS[dateType] || ''
+  const ALLOWED_DATE_TYPES = new Set(['created_at', 'updated_at', 'deleted_at'])
+  const safeDateType = ALLOWED_DATE_TYPES.has(dateType) ? dateType : 'created_at'
 
   // Search fields
   const rawFields = (searchParams.get('searchFields') || 'name,phone').split(',').map(f => f.trim())
@@ -89,8 +85,9 @@ export async function GET(request: NextRequest) {
           OR (${incLoc}   AND l.customer_location ILIKE ${'%' + search + '%'})
           OR (${incRef}   AND l.referral_phone LIKE ${'%' + search + '%'})
         )
-        ${applyDateFilter ? sql`AND (${dateCol} = '' OR l.created_at >= ${dateFrom}::date OR l.updated_at >= ${dateFrom}::date OR l.deleted_at >= ${dateFrom}::date)
-        AND (${dateCol} = '' OR l.created_at <= (${dateTo}::date + '1 day'::interval) OR l.updated_at <= (${dateTo}::date + '1 day'::interval) OR l.deleted_at <= (${dateTo}::date + '1 day'::interval))` : sql``}
+        ${applyDateFilter && safeDateType === 'created_at' ? sql`AND l.created_at >= ${dateFrom}::date AND l.created_at < (${dateTo}::date + '1 day'::interval)` : sql``}
+        ${applyDateFilter && safeDateType === 'updated_at' ? sql`AND l.updated_at >= ${dateFrom}::date AND l.updated_at < (${dateTo}::date + '1 day'::interval)` : sql``}
+        ${applyDateFilter && safeDateType === 'deleted_at' ? sql`AND l.deleted_at >= ${dateFrom}::date AND l.deleted_at < (${dateTo}::date + '1 day'::interval)` : sql``}
       GROUP BY l.id
       ORDER BY l.updated_at DESC
       LIMIT ${limit} OFFSET ${offset}
