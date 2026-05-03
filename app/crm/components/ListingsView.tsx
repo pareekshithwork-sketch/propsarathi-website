@@ -50,7 +50,11 @@ function formatPrice(price: number, currency: string): string {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function ListingsView({ user }: { user: any }) {
+export function ListingsView({ user, highlightId, onClearHighlight }: {
+  user: any
+  highlightId?: string
+  onClearHighlight?: () => void
+}) {
   const [listings, setListings] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [statusFilter, setStatusFilter] = useState('')
@@ -63,6 +67,20 @@ export function ListingsView({ user }: { user: any }) {
   // Status update inline state
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [updatingLoading, setUpdatingLoading] = useState(false)
+
+  // Highlight a specific listing card
+  const [flashId, setFlashId] = useState('')
+  useEffect(() => {
+    if (!highlightId) return
+    setFlashId(highlightId)
+    const el = document.getElementById(`listing-${highlightId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => {
+      setFlashId('')
+      if (onClearHighlight) onClearHighlight()
+    }, 2000)
+    return () => clearTimeout(t)
+  }, [highlightId])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -220,7 +238,7 @@ export function ListingsView({ user }: { user: any }) {
                 const isUpdating = updatingId === ls.listing_id
 
                 return (
-                  <div key={ls.listing_id} className="border border-gray-200 rounded-xl p-4 bg-white hover:shadow-sm transition-shadow">
+                  <div key={ls.listing_id} id={`listing-${ls.listing_id}`} className={`border rounded-xl p-4 bg-white hover:shadow-sm transition-shadow ${flashId === ls.listing_id ? 'border-[#422D83] ring-2 ring-[#422D83]/30' : 'border-gray-200'}`}>
                     {/* Header */}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="min-w-0 flex-1">

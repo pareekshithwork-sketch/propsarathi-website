@@ -16,12 +16,38 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const [lead] = await sql`SELECT * FROM crm_leads_v2 WHERE lead_id = ${id}`
     if (!lead) return NextResponse.json({ success: false, error: 'Lead not found' }, { status: 404 })
 
-    const [enquiries, listings, activity, tasks] = await Promise.all([
+    const [enquiries, listings, activityLogs, stageHistory, tasks] = await Promise.all([
       sql`SELECT * FROM crm_enquiries WHERE lead_id = ${id} ORDER BY created_at DESC`,
       sql`SELECT * FROM crm_listings WHERE lead_id = ${id} ORDER BY created_at DESC`,
-      sql`SELECT * FROM crm_activity_log WHERE lead_id = ${id} ORDER BY created_at DESC LIMIT 50`,
+      sql`SELECT id, lead_id, enquiry_id, listing_id, activity_type, title, description, performed_by, created_at
+          FROM crm_activity_log WHERE lead_id = ${id} ORDER BY created_at DESC LIMIT 100`,
+      sql`SELECT id, enquiry_id, lead_id, from_stage, to_stage, sub_stage, notes, lost_reason, changed_by, created_at
+          FROM crm_stage_history WHERE lead_id = ${id} ORDER BY created_at DESC LIMIT 50`,
       sql`SELECT * FROM crm_tasks WHERE lead_id = ${id} AND status = 'pending' ORDER BY due_at ASC`,
     ])
+
+    const activity = [
+      ...activityLogs.map((a: any) => ({
+        id: String(a.id),
+        type: a.activity_type,
+        enquiry_id: a.enquiry_id || '',
+        listing_id: a.listing_id || '',
+        title: a.title,
+        description: a.description || '',
+        performed_by: a.performed_by,
+        created_at: a.created_at,
+      })),
+      ...stageHistory.map((s: any) => ({
+        id: 'sh_' + s.id,
+        type: 'stage_change',
+        enquiry_id: s.enquiry_id || '',
+        listing_id: '',
+        title: `${s.from_stage || 'New'} → ${s.to_stage}${s.sub_stage ? ' · ' + s.sub_stage : ''}`,
+        description: s.notes || '',
+        performed_by: s.changed_by,
+        created_at: s.created_at,
+      })),
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return NextResponse.json({ success: true, lead, enquiries, listings, activity, tasks })
   } catch (e: any) {

@@ -200,10 +200,12 @@ function leadScore(stage: string | null | undefined): { label: string; cls: stri
 
 // ─── Main LeadsView ────────────────────────────────────────────────────────────
 
-export function LeadsView({ v2Leads, user, onReload }: {
+export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavigateToListing }: {
   v2Leads: any[]
   user: any
   onReload: () => void
+  onNavigateToEnquiry?: (enquiryId: string) => void
+  onNavigateToListing?: (listingId: string) => void
 }) {
   // ── List filters ──
   const [stageTab, setStageTab] = useState('All')
@@ -257,6 +259,14 @@ export function LeadsView({ v2Leads, user, onReload }: {
   // ── Toast ──
   const [toast, setToast] = useState('')
 
+  // ── Log action modal ──
+  const [logModal, setLogModal] = useState<{
+    type: 'call' | 'whatsapp' | 'note'
+    lead: any
+    enquiries: any[]
+    listings: any[]
+  } | null>(null)
+
   // (enquiry form state lives inside EnquiriesTab)
 
   // ── View mode ──
@@ -294,6 +304,16 @@ export function LeadsView({ v2Leads, user, onReload }: {
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
+  }
+
+  function reloadProfile() {
+    if (!profileLead) return
+    setProfileLoading(true)
+    fetch(`/api/crm/v2/leads/${profileLead.lead_id}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => { if (data.success) { setProfileDetail(data); setProfileLead(data.lead) } })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false))
   }
 
   function openFilters() {
@@ -450,7 +470,7 @@ export function LeadsView({ v2Leads, user, onReload }: {
     <div className="flex h-full overflow-hidden">
 
       {/* ── Lead list ── */}
-      <div className={`${profileLead ? 'w-[60%]' : 'flex-1'} flex flex-col bg-white overflow-hidden`}>
+      <div className="flex-1 flex flex-col bg-white overflow-hidden">
 
         {/* Top bar */}
         <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-shrink-0">
@@ -1085,9 +1105,14 @@ export function LeadsView({ v2Leads, user, onReload }: {
         </div>
       </div>
 
-      {/* ── Profile side panel ── */}
+      {/* ── Profile side panel (overlay) ── */}
       {profileLead && (
-        <div className="w-[40%] border-l border-gray-200 flex flex-col overflow-hidden bg-white">
+        <>
+          <div
+            className="fixed inset-0 bg-black/20 z-30"
+            onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null) }}
+          />
+          <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-2xl z-40 flex flex-col border-l border-gray-200 overflow-hidden">
           {/* Panel header */}
           <div className="flex-shrink-0 border-b border-gray-200 px-4 py-3 flex items-center gap-2">
             <button
@@ -1102,23 +1127,30 @@ export function LeadsView({ v2Leads, user, onReload }: {
               <p className="text-[10px] text-gray-400">{profileLead.lead_id}</p>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <a
-                href={`tel:${profileLead.country_code || '+91'}${profileLead.phone}`}
-                onClick={e => e.stopPropagation()}
+              <button
+                onClick={() => setLogModal({
+                  type: 'call',
+                  lead: profileLead,
+                  enquiries: (profileDetail?.enquiries || []).filter((e: any) => e.status === 'active'),
+                  listings: profileDetail?.listings || [],
+                })}
                 className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center"
-                title="Call"
+                title="Log Call"
               >
                 <Phone className="w-3.5 h-3.5" />
-              </a>
-              <a
-                href={`https://wa.me/${(profileLead.country_code || '+91').replace('+', '')}${profileLead.phone}`}
-                target="_blank"
-                rel="noopener noreferrer"
+              </button>
+              <button
+                onClick={() => setLogModal({
+                  type: 'whatsapp',
+                  lead: profileLead,
+                  enquiries: (profileDetail?.enquiries || []).filter((e: any) => e.status === 'active'),
+                  listings: profileDetail?.listings || [],
+                })}
                 className="w-7 h-7 rounded-lg bg-green-500 hover:bg-green-600 text-white flex items-center justify-center"
-                title="WhatsApp"
+                title="Log WhatsApp"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
-              </a>
+              </button>
               {profileLead.email && (
                 <a
                   href={`mailto:${profileLead.email}`}
@@ -1180,25 +1212,26 @@ export function LeadsView({ v2Leads, user, onReload }: {
                   {(!profileDetail?.enquiries || profileDetail.enquiries.length === 0) && (
                     <p className="text-xs text-gray-400 italic">No enquiries yet</p>
                   )}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {(profileDetail?.enquiries || []).map((enq: any) => (
-                      <div key={enq.enquiry_id} className="flex items-center justify-between gap-2 py-1 border-b border-gray-50 last:border-0">
-                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                          <span className="text-[10px] font-mono text-gray-400">{enq.enquiry_id}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${stageBadgeCls(enq.stage)}`}>
-                            {stageDisplayLabel(enq.stage || 'New')}
-                          </span>
-                          {enq.property_type && <span className="text-[10px] text-gray-500">{enq.property_type}</span>}
-                          {enq.scheduled_at && (
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(enq.scheduled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${enq.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {enq.status}
-                        </span>
-                      </div>
+                      <PanelEnquiryCard
+                        key={enq.enquiry_id}
+                        enq={enq}
+                        lead={profileLead}
+                        user={user}
+                        onNavigate={() => {
+                          setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
+                          onNavigateToEnquiry?.(enq.enquiry_id)
+                        }}
+                        onOpenLog={(type) => setLogModal({
+                          type,
+                          lead: profileLead,
+                          enquiries: [enq],
+                          listings: [],
+                        })}
+                        onRefresh={reloadProfile}
+                        showToast={showToast}
+                      />
                     ))}
                   </div>
                 </section>
@@ -1211,49 +1244,101 @@ export function LeadsView({ v2Leads, user, onReload }: {
                   {(!profileDetail?.listings || profileDetail.listings.length === 0) && (
                     <p className="text-xs text-gray-400 italic">No listings yet</p>
                   )}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {(profileDetail?.listings || []).map((ls: any) => (
-                      <div key={ls.listing_id} className="flex items-center justify-between gap-2 py-1 border-b border-gray-50 last:border-0">
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[10px] font-mono text-gray-400 mr-1.5">{ls.listing_id}</span>
-                          <span className="text-xs font-medium text-gray-800 truncate">{ls.title || 'Untitled'}</span>
-                          {ls.asking_price > 0 && (
-                            <p className="text-[10px] text-gray-500">
-                              {ls.currency === 'AED' ? 'AED ' : '₹'}{Number(ls.asking_price).toLocaleString('en-IN')}
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 flex-shrink-0">{ls.status || 'pending'}</span>
-                      </div>
+                      <PanelListingCard
+                        key={ls.listing_id}
+                        ls={ls}
+                        lead={profileLead}
+                        user={user}
+                        onNavigate={() => {
+                          setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
+                          onNavigateToListing?.(ls.listing_id)
+                        }}
+                        onOpenLog={(type) => setLogModal({
+                          type,
+                          lead: profileLead,
+                          enquiries: [],
+                          listings: [ls],
+                        })}
+                        onRefresh={reloadProfile}
+                        showToast={showToast}
+                      />
                     ))}
                   </div>
                 </section>
 
                 {/* Activity */}
                 <section>
-                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Activity History</p>
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Activity Timeline</p>
+                  <button
+                    onClick={() => setLogModal({
+                      type: 'note',
+                      lead: profileLead,
+                      enquiries: (profileDetail?.enquiries || []).filter((e: any) => e.status === 'active'),
+                      listings: profileDetail?.listings || [],
+                    })}
+                    className="w-full text-xs text-[#422D83] border border-[#422D83]/30 rounded-lg py-2 hover:bg-[#422D83]/5 mb-3"
+                  >
+                    + Add Note
+                  </button>
                   {(!profileDetail?.activity || profileDetail.activity.length === 0) && (
                     <p className="text-xs text-gray-400 italic">No activity yet</p>
                   )}
-                  <div className="space-y-2">
-                    {(profileDetail?.activity || []).slice(0, 10).map((item: any, i: number) => (
-                      <div key={item.id || i} className="py-1 border-b border-gray-50 last:border-0">
-                        <p className="text-xs font-medium text-gray-800">{item.title}</p>
-                        {item.description && (
-                          <p className="text-[10px] text-gray-500 italic truncate">"{item.description}"</p>
-                        )}
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          {item.performed_by} ·{' '}
-                          {item.created_at ? new Date(item.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
-                        </p>
-                      </div>
-                    ))}
+                  <div>
+                    {(profileDetail?.activity || []).map((item: any, i: number) => {
+                      const iconMap: Record<string, string> = {
+                        stage_change: '🔄', call: '📞', whatsapp: '💬',
+                        note_added: '📝', note: '📝', listing_added: '🏠',
+                        enquiry_added: '✨', lead_created: '👤', lead_assigned: '👥',
+                      }
+                      const icon = iconMap[item.type] || '•'
+                      return (
+                        <div key={item.id || i} className="flex gap-2.5 py-2 border-b border-gray-50 last:border-0">
+                          <span className="text-base flex-shrink-0 w-5 text-center">{icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-800">{item.title}</p>
+                            {item.description && (
+                              <p className="text-[11px] text-gray-500 mt-0.5 italic">"{item.description}"</p>
+                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {item.enquiry_id && (
+                                <button
+                                  onClick={() => {
+                                    setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
+                                    onNavigateToEnquiry?.(item.enquiry_id)
+                                  }}
+                                  className="text-[10px] px-1.5 py-0.5 bg-[#422D83]/10 text-[#422D83] rounded font-mono hover:bg-[#422D83]/20"
+                                >
+                                  {item.enquiry_id}
+                                </button>
+                              )}
+                              {item.listing_id && (
+                                <button
+                                  onClick={() => {
+                                    setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
+                                    onNavigateToListing?.(item.listing_id)
+                                  }}
+                                  className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded font-mono hover:bg-orange-200"
+                                >
+                                  {item.listing_id}
+                                </button>
+                              )}
+                              <span className="text-[10px] text-gray-400">
+                                {item.performed_by} · {item.created_at ? new Date(item.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </section>
               </>
             )}
           </div>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Add Lead Modal */}
@@ -1359,10 +1444,454 @@ export function LeadsView({ v2Leads, user, onReload }: {
         </div>
       )}
 
+      {/* Log Action Modal */}
+      {logModal && (
+        <LogActionModal
+          type={logModal.type}
+          lead={logModal.lead}
+          enquiries={logModal.enquiries}
+          listings={logModal.listings}
+          user={user}
+          onClose={() => setLogModal(null)}
+          onSuccess={() => {
+            const { type, lead } = logModal
+            setLogModal(null)
+            reloadProfile()
+            if (type === 'call') {
+              const phone = (lead.country_code || '+91') + (lead.phone || '')
+              window.open(`tel:${phone}`)
+            } else if (type === 'whatsapp') {
+              const clean = (lead.country_code || '+91').replace('+', '') + (lead.phone || '')
+              window.open(`https://wa.me/${clean}`)
+            }
+          }}
+        />
+      )}
+
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 bg-[#422D83] text-white px-4 py-2.5 rounded-xl shadow-lg text-sm z-[60]">
           {toast}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Log Action Modal ─────────────────────────────────────────────────────────
+
+function LogActionModal({ type, lead, enquiries, listings, user, onClose, onSuccess }: {
+  type: 'call' | 'whatsapp' | 'note'
+  lead: any
+  enquiries: any[]
+  listings: any[]
+  user: any
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [selectedContext, setSelectedContext] = useState<string>('general')
+  const [notes, setNotes] = useState('')
+  const [duration, setDuration] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const title = type === 'call' ? 'Log Call' : type === 'whatsapp' ? 'Log WhatsApp' : 'Add Note'
+
+  async function handleSubmit() {
+    setSaving(true)
+    try {
+      const enquiryId = selectedContext.startsWith('enq_') ? selectedContext.slice(4) : ''
+      const listingId = selectedContext.startsWith('ls_') ? selectedContext.slice(3) : ''
+      const res = await fetch('/api/crm/v2/activity/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          leadId: lead.lead_id,
+          enquiryId: enquiryId || undefined,
+          listingId: listingId || undefined,
+          activityType: type,
+          notes: notes.trim() || undefined,
+          duration: duration ? Number(duration) : undefined,
+          performedBy: user?.name,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      onSuccess()
+    } catch (e: any) {
+      console.error(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h3 className="font-bold text-gray-900">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
+          {/* Context */}
+          <div>
+            <p className="text-xs font-semibold text-gray-600 mb-2">What is this about?</p>
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="ctx" value="general" checked={selectedContext === 'general'} onChange={() => setSelectedContext('general')} />
+                <span className="text-xs text-gray-700">General — about this lead</span>
+              </label>
+              {enquiries.map((enq: any) => (
+                <label key={enq.enquiry_id} className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="ctx" value={`enq_${enq.enquiry_id}`} checked={selectedContext === `enq_${enq.enquiry_id}`} onChange={() => setSelectedContext(`enq_${enq.enquiry_id}`)} />
+                  <span className="text-xs text-gray-700 font-mono">{enq.enquiry_id}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${stageBadgeCls(enq.stage)}`}>{stageDisplayLabel(enq.stage || 'New')}</span>
+                  {enq.property_type && <span className="text-[10px] text-gray-500">{enq.property_type}</span>}
+                </label>
+              ))}
+              {listings.map((ls: any) => (
+                <label key={ls.listing_id} className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="ctx" value={`ls_${ls.listing_id}`} checked={selectedContext === `ls_${ls.listing_id}`} onChange={() => setSelectedContext(`ls_${ls.listing_id}`)} />
+                  <span className="text-xs text-gray-700 font-mono">{ls.listing_id}</span>
+                  <span className="text-xs text-gray-500">{ls.title || 'Listing'}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-xs font-semibold text-gray-600 block mb-1">Notes</label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Add notes…"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 resize-none"
+            />
+          </div>
+
+          {/* Duration (calls only) */}
+          {type === 'call' && (
+            <div>
+              <label className="text-xs font-semibold text-gray-600 block mb-1">Call Duration (optional)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={duration}
+                  onChange={e => setDuration(e.target.value)}
+                  placeholder="e.g. 5"
+                  min="0"
+                  className="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                />
+                <span className="text-xs text-gray-500">minutes</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex gap-2 px-5 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="flex-1 text-xs py-2 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="flex-1 text-xs py-2 bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center justify-center gap-1"
+          >
+            {saving && <Loader2 className="w-3 h-3 animate-spin" />}
+            {title}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Panel Enquiry Card ────────────────────────────────────────────────────────
+
+function PanelEnquiryCard({ enq, lead, user, onNavigate, onOpenLog, onRefresh, showToast }: {
+  enq: any
+  lead: any
+  user: any
+  onNavigate: () => void
+  onOpenLog: (type: 'call' | 'whatsapp') => void
+  onRefresh: () => void
+  showToast: (msg: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [stageForm, setStageForm] = useState({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
+  const [saving, setSaving] = useState(false)
+
+  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+  const subStages = stageForm.stage ? (SUB_STAGES[stageForm.stage] || []) : []
+  const needsSchedule = ['Callback', 'Schedule Meeting', 'Schedule Site Visit'].includes(stageForm.stage)
+  const needsLostReason = ['Not Interested', 'Drop'].includes(stageForm.stage)
+
+  async function handleSaveStage() {
+    if (!stageForm.stage || !stageForm.notes.trim()) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/crm/v2/enquiries/${enq.enquiry_id}/stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          stage: stageForm.stage,
+          subStage: stageForm.subStage,
+          notes: stageForm.notes,
+          scheduledAt: stageForm.scheduledAt || undefined,
+          lostReason: stageForm.lostReason || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setExpanded(false)
+      setStageForm({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
+      showToast(`Stage updated to ${stageDisplayLabel(stageForm.stage)}`)
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error saving stage')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className={`border rounded-xl overflow-hidden ${enq.status === 'active' ? 'border-[#422D83]/20' : 'border-gray-200 opacity-60'}`}>
+      <div
+        className={`p-3 cursor-pointer ${enq.status === 'active' ? 'bg-[#422D83]/5' : 'bg-gray-50'}`}
+        onClick={onNavigate}
+      >
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-mono text-gray-500">{enq.enquiry_id}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${stageBadgeCls(enq.stage)}`}>
+              {stageDisplayLabel(enq.stage || 'New')}
+            </span>
+            {enq.sub_stage && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">{enq.sub_stage}</span>}
+          </div>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${enq.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+            {enq.status}
+          </span>
+        </div>
+        {enq.property_type && (
+          <p className="text-xs text-gray-600">{enq.property_type}{enq.location_pref ? ` · ${enq.location_pref}` : ''}</p>
+        )}
+        {(enq.min_budget > 0 || enq.max_budget > 0) && (
+          <p className="text-xs text-gray-500">
+            {enq.currency === 'AED' ? 'AED' : '₹'}{Number(enq.min_budget || 0).toLocaleString('en-IN')} – {enq.currency === 'AED' ? 'AED' : '₹'}{Number(enq.max_budget || 0).toLocaleString('en-IN')}
+          </p>
+        )}
+        <p className="text-[10px] text-gray-400 mt-0.5">
+          {enq.scheduled_at
+            ? `📅 ${new Date(enq.scheduled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+            : '📅 Not scheduled'}
+        </p>
+      </div>
+      <div className="border-t border-gray-100 px-3 py-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+        {enq.status === 'active' && (
+          <button
+            onClick={() => setExpanded(p => !p)}
+            className={`text-xs px-2.5 py-1 rounded-lg border transition-colors flex items-center gap-1 ${expanded ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#422D83]'}`}
+          >
+            Change Stage {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+        )}
+        <button onClick={() => onOpenLog('call')} className="w-6 h-6 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-600 flex items-center justify-center" title="Log Call">
+          <Phone className="w-3 h-3" />
+        </button>
+        <button onClick={() => onOpenLog('whatsapp')} className="w-6 h-6 rounded bg-green-50 hover:bg-green-100 text-green-600 flex items-center justify-center" title="Log WhatsApp">
+          <MessageCircle className="w-3 h-3" />
+        </button>
+      </div>
+      {expanded && (
+        <div className="border-t border-[#422D83]/10 bg-white p-3 space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {STAGE_ACTIONS.map(action => (
+              <button
+                key={action.apiStage}
+                onClick={() => setStageForm(p => ({ ...p, stage: p.stage === action.apiStage ? '' : action.apiStage, subStage: '', lostReason: '' }))}
+                className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${action.color} ${stageForm.stage === action.apiStage ? 'ring-2 ring-offset-1 ring-[#422D83]/30' : ''}`}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+          {subStages.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {subStages.map((s: string) => (
+                <button key={s} onClick={() => setStageForm(p => ({ ...p, subStage: p.subStage === s ? '' : s }))}
+                  className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${stageForm.subStage === s ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300'}`}
+                >{s}</button>
+              ))}
+            </div>
+          )}
+          {needsSchedule && (
+            <input type="datetime-local" value={stageForm.scheduledAt} onChange={e => setStageForm(p => ({ ...p, scheduledAt: e.target.value }))} className={inputCls} />
+          )}
+          {needsLostReason && (
+            <select value={stageForm.lostReason} onChange={e => setStageForm(p => ({ ...p, lostReason: e.target.value }))} className={inputCls}>
+              <option value="">Select reason…</option>
+              {(SUB_STAGES[stageForm.stage] || []).map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          )}
+          <textarea
+            value={stageForm.notes}
+            onChange={e => setStageForm(p => ({ ...p, notes: e.target.value }))}
+            className={`${inputCls} resize-none ${!stageForm.notes.trim() && stageForm.stage ? 'border-red-300' : ''}`}
+            rows={2}
+            placeholder="Notes (required)…"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveStage}
+              disabled={saving || !stageForm.stage || !stageForm.notes.trim() || (needsLostReason && !stageForm.lostReason)}
+              className="px-3 py-1.5 bg-[#422D83] text-white text-xs rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save
+            </button>
+            <button onClick={() => setExpanded(false)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-lg hover:bg-gray-200">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Panel Listing Card ────────────────────────────────────────────────────────
+
+function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, showToast }: {
+  ls: any
+  lead: any
+  user: any
+  onNavigate: () => void
+  onOpenLog: (type: 'call' | 'whatsapp') => void
+  onRefresh: () => void
+  showToast: (msg: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [visitNotes, setVisitNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const statusBadge: Record<string, string> = {
+    pending: 'bg-orange-100 text-orange-700',
+    rm_verified: 'bg-blue-100 text-blue-700',
+    admin_approved: 'bg-violet-100 text-violet-700',
+    live: 'bg-green-100 text-green-700',
+    sold: 'bg-gray-100 text-gray-500',
+  }
+
+  function nextAction(): { label: string; newStatus: string } | null {
+    if (ls.status === 'pending' && (user?.role === 'rm' || user?.role === 'admin' || user?.role === 'super_admin')) return { label: 'Mark RM Verified', newStatus: 'rm_verified' }
+    if (ls.status === 'rm_verified' && (user?.role === 'admin' || user?.role === 'super_admin')) return { label: 'Admin Approve', newStatus: 'admin_approved' }
+    if (ls.status === 'admin_approved' && (user?.role === 'admin' || user?.role === 'super_admin')) return { label: 'Go Live', newStatus: 'live' }
+    return null
+  }
+
+  const action = nextAction()
+
+  async function handleStatusUpdate() {
+    if (!action) return
+    if (ls.status === 'pending' && !visitNotes.trim()) return
+    setSaving(true)
+    try {
+      const body: any = { status: action.newStatus }
+      if (visitNotes.trim()) body.rmVisitNotes = visitNotes
+      const res = await fetch(`/api/crm/v2/listings/${ls.listing_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setExpanded(false)
+      setVisitNotes('')
+      showToast(`Listing updated to ${action.newStatus}`)
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error updating listing')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 resize-none"
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="p-3 bg-gray-50 cursor-pointer" onClick={onNavigate}>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-mono text-gray-500">{ls.listing_id}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statusBadge[ls.status] || 'bg-gray-100 text-gray-600'}`}>
+              {ls.status || 'pending'}
+            </span>
+          </div>
+        </div>
+        <p className="text-xs font-medium text-gray-800 truncate">{ls.title || 'Untitled Listing'}</p>
+        {(ls.property_type || ls.location) && (
+          <p className="text-xs text-gray-500">{[ls.property_type, ls.location].filter(Boolean).join(' · ')}</p>
+        )}
+        {ls.asking_price > 0 && (
+          <p className="text-xs text-gray-500">{ls.currency === 'AED' ? 'AED ' : '₹'}{Number(ls.asking_price).toLocaleString('en-IN')}</p>
+        )}
+        {(ls.carpet_area || ls.floor) && (
+          <p className="text-[10px] text-gray-400">{[ls.carpet_area ? `${ls.carpet_area} sqft` : '', ls.floor ? `Floor ${ls.floor}` : ''].filter(Boolean).join(' · ')}</p>
+        )}
+      </div>
+      <div className="border-t border-gray-100 px-3 py-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
+        {action && (
+          <button
+            onClick={() => setExpanded(p => !p)}
+            className={`text-xs px-2.5 py-1 rounded-lg border transition-colors flex items-center gap-1 ${expanded ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-300 hover:border-[#422D83]'}`}
+          >
+            Update Status {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          </button>
+        )}
+        <button onClick={() => onOpenLog('call')} className="w-6 h-6 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-600 flex items-center justify-center" title="Log Call">
+          <Phone className="w-3 h-3" />
+        </button>
+        <button onClick={() => onOpenLog('whatsapp')} className="w-6 h-6 rounded bg-green-50 hover:bg-green-100 text-green-600 flex items-center justify-center" title="Log WhatsApp">
+          <MessageCircle className="w-3 h-3" />
+        </button>
+      </div>
+      {expanded && action && (
+        <div className="border-t border-gray-100 bg-white p-3 space-y-3">
+          <p className="text-xs font-semibold text-gray-700">→ {action.label}</p>
+          {ls.status === 'pending' && (
+            <div>
+              <label className="text-xs text-gray-600 block mb-1">RM Visit Notes (required)</label>
+              <textarea
+                value={visitNotes}
+                onChange={e => setVisitNotes(e.target.value)}
+                rows={3}
+                className={`${inputCls} ${!visitNotes.trim() ? 'border-red-300' : ''}`}
+                placeholder="Notes from site visit…"
+              />
+            </div>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={handleStatusUpdate}
+              disabled={saving || (ls.status === 'pending' && !visitNotes.trim())}
+              className="px-3 py-1.5 bg-[#422D83] text-white text-xs rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1"
+            >
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              Save
+            </button>
+            <button onClick={() => setExpanded(false)} className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-lg hover:bg-gray-200">
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>

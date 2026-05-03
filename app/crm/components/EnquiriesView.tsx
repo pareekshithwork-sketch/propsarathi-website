@@ -90,7 +90,11 @@ function formatScheduled(dateStr: string | null | undefined): { text: string; cl
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function EnquiriesView({ user }: { user: any }) {
+export function EnquiriesView({ user, highlightId, onClearHighlight }: {
+  user: any
+  highlightId?: string
+  onClearHighlight?: () => void
+}) {
   const [rawEnquiries, setRawEnquiries] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [stageFilter, setStageFilter] = useState('')
@@ -101,6 +105,13 @@ export function EnquiriesView({ user }: { user: any }) {
   const [sort, setSort] = useState('updated_at')
   const [rms, setRms] = useState<any[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!highlightId) return
+    setExpandedId(highlightId)
+    const t = setTimeout(() => { if (onClearHighlight) onClearHighlight() }, 100)
+    return () => clearTimeout(t)
+  }, [highlightId])
   const [stageForm, setStageForm] = useState({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
   const [stageSaving, setStageSaving] = useState(false)
   const [toast, setToast] = useState('')

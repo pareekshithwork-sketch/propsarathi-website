@@ -98,6 +98,10 @@ export default function CRMPage() {
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [bulkImportType, setBulkImportType] = useState<'leads' | 'data'>('leads')
 
+  // ── Cross-view navigation (from lead panel → enquiries/listings) ──
+  const [highlightEnquiryId, setHighlightEnquiryId] = useState('')
+  const [highlightListingId, setHighlightListingId] = useState('')
+
   // ── Auth check on mount ──
   useEffect(() => {
     fetch("/api/crm/auth/me")
@@ -778,13 +782,31 @@ export default function CRMPage() {
             <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} v2Dashboard={v2Dashboard} />
           )}
           {view === "leads" && (
-            <LeadsView v2Leads={v2Leads} user={user} onReload={loadAll} />
+            <LeadsView
+              v2Leads={v2Leads}
+              user={user}
+              onReload={loadAll}
+              onNavigateToEnquiry={(id) => { setView('enquiries'); setHighlightEnquiryId(id) }}
+              onNavigateToListing={(id) => { setView('listings'); setHighlightListingId(id) }}
+            />
           )}
           {view === "reports" && (
             <ReportsView v2Leads={v2Leads} />
           )}
-          {view === "enquiries" && <EnquiriesView user={user} />}
-          {view === "listings" && <ListingsView user={user} />}
+          {view === "enquiries" && (
+            <EnquiriesView
+              user={user}
+              highlightId={highlightEnquiryId}
+              onClearHighlight={() => setHighlightEnquiryId('')}
+            />
+          )}
+          {view === "listings" && (
+            <ListingsView
+              user={user}
+              highlightId={highlightListingId}
+              onClearHighlight={() => setHighlightListingId('')}
+            />
+          )}
           {view === "properties" && <PropertiesView user={user} />}
           {view === "projects" && (
             user?.role === "admin"
