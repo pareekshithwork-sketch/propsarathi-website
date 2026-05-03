@@ -267,6 +267,14 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
     listings: any[]
   } | null>(null)
 
+  // ── Add enquiry from panel ──
+  const [showAddEnquiry, setShowAddEnquiry] = useState(false)
+  const [addEnqForm, setAddEnqForm] = useState({
+    propertyType: '', locationPref: '', minBudget: '', maxBudget: '',
+    currency: 'INR', bedrooms: '', notes: '',
+  })
+  const [addEnqSaving, setAddEnqSaving] = useState(false)
+
   // (enquiry form state lives inside EnquiriesTab)
 
   // ── View mode ──
@@ -314,6 +322,38 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
       .then(data => { if (data.success) { setProfileDetail(data); setProfileLead(data.lead) } })
       .catch(() => {})
       .finally(() => setProfileLoading(false))
+  }
+
+  async function handleAddEnquiry() {
+    if (!profileLead || !addEnqForm.propertyType) return
+    setAddEnqSaving(true)
+    try {
+      const res = await fetch('/api/crm/v2/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          leadId: profileLead.lead_id,
+          propertyType: addEnqForm.propertyType,
+          locationPref: addEnqForm.locationPref,
+          minBudget: addEnqForm.minBudget ? Number(addEnqForm.minBudget) : 0,
+          maxBudget: addEnqForm.maxBudget ? Number(addEnqForm.maxBudget) : 0,
+          currency: addEnqForm.currency,
+          bedrooms: addEnqForm.bedrooms,
+          notes: addEnqForm.notes,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setShowAddEnquiry(false)
+      setAddEnqForm({ propertyType: '', locationPref: '', minBudget: '', maxBudget: '', currency: 'INR', bedrooms: '', notes: '' })
+      showToast('Enquiry created')
+      reloadProfile()
+    } catch (e: any) {
+      showToast(e.message || 'Error creating enquiry')
+    } finally {
+      setAddEnqSaving(false)
+    }
   }
 
   function openFilters() {
@@ -1110,13 +1150,13 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
         <>
           <div
             className="fixed inset-0 bg-black/20 z-30"
-            onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null) }}
+            onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null); setShowAddEnquiry(false) }}
           />
           <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-2xl z-40 flex flex-col border-l border-gray-200 overflow-hidden">
           {/* Panel header */}
           <div className="flex-shrink-0 border-b border-gray-200 px-4 py-3 flex items-center gap-2">
             <button
-              onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null) }}
+              onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null); setShowAddEnquiry(false) }}
               className="text-gray-400 hover:text-gray-600 flex-shrink-0"
               title="Close"
             >
@@ -1234,6 +1274,118 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                       />
                     ))}
                   </div>
+
+                  {/* Add Enquiry button + inline form */}
+                  {!showAddEnquiry ? (
+                    <button
+                      onClick={() => setShowAddEnquiry(true)}
+                      className="w-full text-xs text-[#422D83] border border-[#422D83]/30 border-dashed rounded-lg py-2 hover:bg-[#422D83]/5 mt-2"
+                    >
+                      + Add Enquiry
+                    </button>
+                  ) : (
+                    <div className="mt-2 border border-[#422D83]/20 rounded-xl p-3 space-y-2.5 bg-[#422D83]/5">
+                      <p className="text-xs font-semibold text-[#422D83]">New Enquiry</p>
+
+                      <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">Property Type *</label>
+                        <select
+                          value={addEnqForm.propertyType}
+                          onChange={e => setAddEnqForm(p => ({ ...p, propertyType: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-white"
+                        >
+                          <option value="">Select…</option>
+                          {['Apartment', 'Villa', 'Plot', 'Commercial', 'Other'].map(pt => (
+                            <option key={pt}>{pt}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">Location Preference</label>
+                        <input
+                          type="text"
+                          value={addEnqForm.locationPref}
+                          onChange={e => setAddEnqForm(p => ({ ...p, locationPref: e.target.value }))}
+                          placeholder="Area / locality"
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <div className="col-span-1">
+                          <label className="text-[10px] text-gray-500 block mb-1">Min Budget</label>
+                          <input
+                            type="number"
+                            value={addEnqForm.minBudget}
+                            onChange={e => setAddEnqForm(p => ({ ...p, minBudget: e.target.value }))}
+                            placeholder="Min"
+                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <label className="text-[10px] text-gray-500 block mb-1">Max Budget</label>
+                          <input
+                            type="number"
+                            value={addEnqForm.maxBudget}
+                            onChange={e => setAddEnqForm(p => ({ ...p, maxBudget: e.target.value }))}
+                            placeholder="Max"
+                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <label className="text-[10px] text-gray-500 block mb-1">Currency</label>
+                          <select
+                            value={addEnqForm.currency}
+                            onChange={e => setAddEnqForm(p => ({ ...p, currency: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-white"
+                          >
+                            <option>INR</option>
+                            <option>AED</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">Bedrooms</label>
+                        <input
+                          type="number"
+                          value={addEnqForm.bedrooms}
+                          onChange={e => setAddEnqForm(p => ({ ...p, bedrooms: e.target.value }))}
+                          placeholder="e.g. 2"
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">Notes</label>
+                        <textarea
+                          value={addEnqForm.notes}
+                          onChange={e => setAddEnqForm(p => ({ ...p, notes: e.target.value }))}
+                          rows={2}
+                          placeholder="Optional notes…"
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 resize-none"
+                        />
+                      </div>
+
+                      <div className="flex gap-2 pt-0.5">
+                        <button
+                          onClick={handleAddEnquiry}
+                          disabled={addEnqSaving || !addEnqForm.propertyType}
+                          className="flex-1 text-xs py-1.5 bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                          {addEnqSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                          Create Enquiry
+                        </button>
+                        <button
+                          onClick={() => { setShowAddEnquiry(false); setAddEnqForm({ propertyType: '', locationPref: '', minBudget: '', maxBudget: '', currency: 'INR', bedrooms: '', notes: '' }) }}
+                          className="flex-1 text-xs py-1.5 bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 {/* Listings */}
