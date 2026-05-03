@@ -68,6 +68,14 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [updatingLoading, setUpdatingLoading] = useState(false)
 
+  // Cloudinary upload state (for rm_verified flow)
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
+  const [cloudUploading, setCloudUploading] = useState(false)
+
+  // SEO / go-live state (for admin_approved → live flow)
+  const [seoForm, setSeoForm] = useState({ seoTitle: '', seoDescription: '', slug: '' })
+  const [seoSaving, setSeoSaving] = useState(false)
+
   // Highlight a specific listing card
   const [flashId, setFlashId] = useState('')
   useEffect(() => {
@@ -107,13 +115,14 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
 
   useEffect(() => { loadListings() }, [loadListings])
 
-  async function updateListingStatus(listingId: string, newStatus: string) {
+  async function updateListingStatus(listingId: string, newStatus: string, extra?: Record<string, any>) {
     setUpdatingLoading(true)
     try {
       const res = await fetch(`/api/crm/v2/listings/${listingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, ...extra }),
+        credentials: 'include',
       })
       const data = await res.json()
       if (!data.success) throw new Error(data.error)
@@ -127,14 +136,67 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
     }
   }
 
-  function getNextStatuses(currentStatus: string, isAdmin: boolean): { value: string; label: string }[] {
-    if (currentStatus === 'pending') return [{ value: 'rm_verified', label: 'Mark RM Verified' }]
-    if (currentStatus === 'rm_verified' && isAdmin) return [{ value: 'admin_approved', label: 'Admin Approve' }]
-    if (currentStatus === 'admin_approved' && isAdmin) return [{ value: 'live', label: 'Go Live' }]
-    return []
+  async function handleRmVerify(listingId: string) {
+    setCloudUploading(true)
+    try {
+      let imageUrls: string[] = []
+      if (uploadFiles.length > 0) {
+        const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
+        const preset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
+        if (!cloudName || !preset) {
+          showToast('Cloudinary not configured — saving without photos')
+        } else {
+          for (const file of uploadFiles) {
+            const fd = new FormData()
+            fd.append('file', file)
+            fd.append('upload_preset', preset)
+            const r = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: fd })
+            const d = await r.json()
+            if (d.secure_url) imageUrls.push(d.secure_url)
+          }
+        }
+      }
+      await updateListingStatus(listingId, 'rm_verified', { images: imageUrls })
+      setUploadFiles([])
+    } catch (e: any) {
+      showToast(e.message || 'Error')
+    } finally {
+      setCloudUploading(false)
+    }
   }
 
-  const isAdmin = user?.role === 'admin'
+  function initSeoForm(ls: any) {
+    const rawSlug = (ls.title || '')
+      .toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-').slice(0, 50)
+    const slug = ls.slug || `${rawSlug}-${(ls.listing_id || '').slice(-6)}`
+    const desc = ls.seo_description ||
+      `${ls.bedrooms > 0 ? ls.bedrooms + ' BHK ' : ''}${ls.property_type || 'Property'} for sale${ls.locality ? ' in ' + ls.locality : ''}${ls.city ? ', ' + ls.city : ''}. ${ls.asking_price > 0 ? 'Asking price: ' + formatPrice(ls.asking_price, ls.currency) + '.' : ''} Listed on PropSarathi.`
+    setSeoForm({ seoTitle: ls.seo_title || ls.title || '', seoDescription: desc, slug })
+  }
+
+  async function handleGoLive(listingId: string) {
+    if (!seoForm.slug.trim()) { showToast('Slug is required'); return }
+    setSeoSaving(true)
+    try {
+      await updateListingStatus(listingId, 'live', {
+        isLive: true,
+        seoTitle: seoForm.seoTitle,
+        seoDescription: seoForm.seoDescription,
+        slug: seoForm.slug.trim(),
+      })
+    } finally {
+      setSeoSaving(false)
+    }
+  }
+
+  function getNextAction(currentStatus: string, isAdmin: boolean): string {
+    if (currentStatus === 'pending') return 'rm_verified'
+    if (currentStatus === 'rm_verified' && isAdmin) return 'admin_approved'
+    if (currentStatus === 'admin_approved' && isAdmin) return 'live'
+    return ''
+  }
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-white">
@@ -234,7 +296,7 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
                 const statusCls = LISTING_STATUS_BADGE[ls.status] || 'bg-gray-100 text-gray-600'
                 const statusLabel = LISTING_STATUS_LABEL[ls.status] || ls.status || 'Pending'
                 const phoneClean = (ls.lead_country_code || '+91').replace('+', '') + (ls.lead_phone || '')
-                const nextStatuses = getNextStatuses(ls.status, isAdmin)
+                const nextAction = getNextAction(ls.status, isAdmin)
                 const isUpdating = updatingId === ls.listing_id
 
                 return (
@@ -245,6 +307,12 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
                         <div className="flex items-center gap-2 mb-1">
                           <p className="text-xs font-mono text-gray-400">{ls.listing_id}</p>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statusCls}`}>{statusLabel}</span>
+                          {ls.is_live && (
+                            <a href={`/secondary/${ls.slug}`} target="_blank" rel="noopener noreferrer"
+                              className="text-[10px] text-green-600 hover:underline">
+                              View Live ↗
+                            </a>
+                          )}
                         </div>
                         <p className="text-sm font-bold text-gray-900 truncate">{ls.title || 'Untitled'}</p>
                       </div>
@@ -272,9 +340,7 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
 
                     {/* Lead info */}
                     <div className="border-t border-gray-100 pt-2 mt-2 flex items-center justify-between">
-                      <div>
-                        <p className="text-xs text-gray-400">Lead: <span className="text-gray-700 font-medium">{ls.lead_name}</span></p>
-                      </div>
+                      <p className="text-xs text-gray-400">Lead: <span className="text-gray-700 font-medium">{ls.lead_name}</span></p>
                       <div className="flex items-center gap-1.5">
                         <a href={`tel:${ls.lead_country_code || '+91'}${ls.lead_phone}`} className="text-gray-400 hover:text-blue-600">
                           <Phone className="w-3.5 h-3.5" />
@@ -285,38 +351,113 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
                       </div>
                     </div>
 
-                    {/* Status update */}
-                    {nextStatuses.length > 0 && (
+                    {/* Status update panel */}
+                    {nextAction && (
                       <div className="mt-3">
-                        {isUpdating ? (
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs text-gray-600">Move to:</p>
-                            {nextStatuses.map(ns => (
+                        {!isUpdating ? (
+                          <button
+                            onClick={() => {
+                              setUpdatingId(ls.listing_id)
+                              setUploadFiles([])
+                              if (ls.status === 'admin_approved') initSeoForm(ls)
+                            }}
+                            className="text-xs px-2.5 py-1 border border-gray-300 text-gray-600 rounded-lg hover:border-[#422D83] hover:text-[#422D83] transition-colors"
+                          >
+                            Update Status ▾
+                          </button>
+                        ) : nextAction === 'rm_verified' ? (
+                          // ── Photo upload panel ──
+                          <div className="border border-blue-100 rounded-xl p-3 bg-blue-50 space-y-3">
+                            <p className="text-xs font-semibold text-blue-800">Mark RM Verified</p>
+                            <div>
+                              <label className="text-xs text-gray-600 mb-1 block">Upload property photos (optional)</label>
+                              <input
+                                type="file" multiple accept="image/*"
+                                onChange={e => setUploadFiles(Array.from(e.target.files || []))}
+                                className="text-xs text-gray-600 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-[#422D83] file:text-white hover:file:bg-[#321f6b] cursor-pointer"
+                              />
+                              {uploadFiles.length > 0 && (
+                                <p className="text-xs text-blue-600 mt-1">{uploadFiles.length} photo{uploadFiles.length !== 1 ? 's' : ''} selected</p>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
                               <button
-                                key={ns.value}
-                                onClick={() => updateListingStatus(ls.listing_id, ns.value)}
-                                disabled={updatingLoading}
-                                className="text-xs px-2.5 py-1 bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1"
+                                onClick={() => handleRmVerify(ls.listing_id)}
+                                disabled={cloudUploading || updatingLoading}
+                                className="text-xs px-3 py-1.5 bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1"
                               >
-                                {updatingLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                                {ns.label}
+                                {(cloudUploading || updatingLoading) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                {uploadFiles.length > 0 ? 'Upload & Verify' : 'Verify'}
                               </button>
-                            ))}
+                              <button onClick={() => setUpdatingId(null)} className="text-xs text-gray-400 hover:text-gray-600">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : nextAction === 'admin_approved' ? (
+                          // ── Admin approve (simple) ──
+                          <div className="flex items-center gap-2">
                             <button
-                              onClick={() => setUpdatingId(null)}
-                              className="text-xs text-gray-400 hover:text-gray-600"
+                              onClick={() => updateListingStatus(ls.listing_id, 'admin_approved')}
+                              disabled={updatingLoading}
+                              className="text-xs px-3 py-1.5 bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1"
                             >
+                              {updatingLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              Admin Approve
+                            </button>
+                            <button onClick={() => setUpdatingId(null)} className="text-xs text-gray-400 hover:text-gray-600">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => setUpdatingId(ls.listing_id)}
-                            className="text-xs px-2.5 py-1 border border-gray-300 text-gray-600 rounded-lg hover:border-[#422D83] hover:text-[#422D83] transition-colors"
-                          >
-                            Update Status
-                          </button>
-                        )}
+                        ) : nextAction === 'live' ? (
+                          // ── SEO + Go Live panel ──
+                          <div className="border border-purple-100 rounded-xl p-3 bg-purple-50 space-y-3">
+                            <p className="text-xs font-semibold text-purple-800">Go Live — SEO Details</p>
+                            <div>
+                              <label className="text-xs text-gray-600 mb-1 block">SEO Title</label>
+                              <input
+                                type="text" value={seoForm.seoTitle}
+                                onChange={e => setSeoForm(p => ({ ...p, seoTitle: e.target.value }))}
+                                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                                placeholder="SEO page title"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-600 mb-1 block">SEO Description</label>
+                              <textarea
+                                value={seoForm.seoDescription}
+                                onChange={e => setSeoForm(p => ({ ...p, seoDescription: e.target.value }))}
+                                className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 resize-none"
+                                rows={2} placeholder="Meta description"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-600 mb-1 block">URL Slug <span className="text-red-500">*</span></label>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-gray-400">/secondary/</span>
+                                <input
+                                  type="text" value={seoForm.slug}
+                                  onChange={e => setSeoForm(p => ({ ...p, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') }))}
+                                  className="flex-1 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
+                                  placeholder="slug-here"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleGoLive(ls.listing_id)}
+                                disabled={seoSaving || !seoForm.slug.trim()}
+                                className="text-xs px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {seoSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                Go Live
+                              </button>
+                              <button onClick={() => setUpdatingId(null)} className="text-xs text-gray-400 hover:text-gray-600">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>

@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Search, MapPin, Building2, SlidersHorizontal, X, ChevronDown,
-  Menu, User, LogOut, ArrowLeft, Grid3X3, List
+  Menu, User, LogOut, ArrowLeft, Grid3X3, List, Plus, Loader2, CheckCircle2
 } from "lucide-react"
 import { LogoCompact } from "@/components/Logo"
 import { usePortal } from "./PortalProvider"
@@ -53,6 +53,7 @@ export default function PropertiesClient() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [showListModal, setShowListModal] = useState(false)
 
   // Filters
   const [search, setSearch] = useState(searchParams.get('q') || '')
@@ -124,6 +125,14 @@ export default function PropertiesClient() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowListModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">List Your Property</span>
+              <span className="sm:hidden">List</span>
+            </button>
             <button onClick={() => setFiltersOpen(!filtersOpen)}
               className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-sm font-medium transition ${filtersOpen ? 'border-[#422D83] bg-[#f5f3fd] text-[#371f6e]' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               <SlidersHorizontal className="w-4 h-4" />
@@ -215,6 +224,10 @@ export default function PropertiesClient() {
           </div>
         )}
       </header>
+
+      {showListModal && (
+        <SellerListingModal onClose={() => setShowListModal(false)} />
+      )}
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 py-6">
@@ -334,5 +347,188 @@ function ProjectCardList({ project }: { project: any }) {
         </div>
       </div>
     </Link>
+  )
+}
+
+// ─── Seller Listing Modal ─────────────────────────────────────────────────────
+
+const PROP_TYPES = ['Apartment', 'Villa', 'Plot', 'Commercial', 'Office', 'Studio', 'Other']
+const BED_OPTS = ['1', '2', '3', '4', '4+']
+
+function SellerListingModal({ onClose }: { onClose: () => void }) {
+  const inp = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 bg-gray-50"
+
+  const [form, setForm] = useState({
+    name: '', phone: '', email: '',
+    propertyType: 'Apartment', bedrooms: '2', areaSqft: '',
+    city: '', locality: '', address: '',
+    askingPrice: '', currency: 'INR', notes: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState('')
+
+  const showBeds = !['Plot', 'Commercial', 'Office'].includes(form.propertyType)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.name.trim() || !form.phone.trim() || !form.city.trim()) {
+      setError('Name, phone and city are required')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await fetch('/api/public/seller-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          bedrooms: showBeds ? Number(form.bedrooms) : 0,
+          areaSqft: form.areaSqft ? Number(form.areaSqft) : 0,
+          askingPrice: form.askingPrice ? Number(form.askingPrice) : 0,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setSubmitted(true)
+    } catch (e: any) {
+      setError(e.message || 'Something went wrong. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">List Your Property</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Our team will contact you within 24 hours</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {submitted ? (
+          <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center">
+            <CheckCircle2 className="w-14 h-14 text-green-500 mb-4" />
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Submitted Successfully!</h3>
+            <p className="text-gray-500 text-sm mb-6">
+              We&apos;ve received your listing. Our team will reach out to verify and list your property.
+            </p>
+            <button onClick={onClose} className="px-6 py-2.5 bg-[#422D83] text-white rounded-xl text-sm font-medium hover:bg-[#2d1a60] transition">
+              Close
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            {/* Contact */}
+            <div>
+              <p className="text-xs font-bold text-[#422D83] uppercase tracking-wider mb-3">Your Details</p>
+              <div className="space-y-3">
+                <input type="text" placeholder="Full Name *" value={form.name}
+                  onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className={inp} />
+                <input type="tel" placeholder="Phone Number *" value={form.phone}
+                  onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} className={inp} />
+                <input type="email" placeholder="Email (optional)" value={form.email}
+                  onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className={inp} />
+              </div>
+            </div>
+
+            {/* Property */}
+            <div>
+              <p className="text-xs font-bold text-[#422D83] uppercase tracking-wider mb-3">Property Details</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1.5 block">Property Type</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PROP_TYPES.map(pt => (
+                      <button key={pt} type="button" onClick={() => setForm(p => ({ ...p, propertyType: pt }))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${form.propertyType === pt ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#422D83]'}`}>
+                        {pt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {showBeds && (
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1.5 block">Bedrooms</label>
+                    <div className="flex gap-1.5">
+                      {BED_OPTS.map(b => (
+                        <button key={b} type="button" onClick={() => setForm(p => ({ ...p, bedrooms: b }))}
+                          className={`w-10 h-9 rounded-lg text-xs font-medium border transition ${form.bedrooms === b ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#422D83]'}`}>
+                          {b}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <input type="number" placeholder="Area in sqft (optional)" value={form.areaSqft}
+                  onChange={e => setForm(p => ({ ...p, areaSqft: e.target.value }))} className={inp} />
+              </div>
+            </div>
+
+            {/* Location */}
+            <div>
+              <p className="text-xs font-bold text-[#422D83] uppercase tracking-wider mb-3">Location</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="text" placeholder="City *" value={form.city}
+                    onChange={e => setForm(p => ({ ...p, city: e.target.value }))} className={inp} />
+                  <input type="text" placeholder="Locality / Area" value={form.locality}
+                    onChange={e => setForm(p => ({ ...p, locality: e.target.value }))} className={inp} />
+                </div>
+                <input type="text" placeholder="Full Address (optional)" value={form.address}
+                  onChange={e => setForm(p => ({ ...p, address: e.target.value }))} className={inp} />
+              </div>
+            </div>
+
+            {/* Price */}
+            <div>
+              <p className="text-xs font-bold text-[#422D83] uppercase tracking-wider mb-3">Asking Price</p>
+              <div className="flex gap-3">
+                <div className="flex gap-1.5 flex-shrink-0">
+                  {['INR', 'AED'].map(c => (
+                    <button key={c} type="button" onClick={() => setForm(p => ({ ...p, currency: c }))}
+                      className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition ${form.currency === c ? 'bg-[#422D83] text-white border-[#422D83]' : 'bg-white text-gray-600 border-gray-200 hover:border-[#422D83]'}`}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <input type="number" placeholder="Amount (optional)" value={form.askingPrice}
+                  onChange={e => setForm(p => ({ ...p, askingPrice: e.target.value }))} className={`${inp} flex-1`} />
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <p className="text-xs font-bold text-[#422D83] uppercase tracking-wider mb-2">Additional Notes</p>
+              <textarea placeholder="Anything else you&apos;d like us to know (optional)"
+                value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                className={`${inp} resize-none`} rows={3} />
+            </div>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">{error}</p>
+            )}
+
+            <div className="flex justify-end gap-3 pb-2">
+              <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-200 text-sm text-gray-600 rounded-xl hover:bg-gray-50">
+                Cancel
+              </button>
+              <button type="submit" disabled={saving}
+                className="px-6 py-2.5 bg-[#422D83] text-white text-sm font-semibold rounded-xl hover:bg-[#2d1a60] disabled:opacity-50 flex items-center gap-2 transition">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Submit Listing
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
   )
 }
