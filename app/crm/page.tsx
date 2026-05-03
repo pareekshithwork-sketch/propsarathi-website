@@ -37,6 +37,7 @@ export default function CRMPage() {
   const [loginPassword, setLoginPassword] = useState("")
   const [loginError, setLoginError] = useState("")
   const [loginLoading, setLoginLoading] = useState(false)
+  const [sessionToast, setSessionToast] = useState("")
 
   // ── View ──
   const [view, setView] = useState<"dashboard" | "leads" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team" | "enquiries" | "listings" | "properties">("dashboard")
@@ -111,10 +112,20 @@ export default function CRMPage() {
           setUser(d.user)
           setAuthState("crm")
         } else {
-          setAuthState("login")
+          setSessionToast("Session expired, please log in again")
+          setTimeout(() => {
+            setSessionToast("")
+            setAuthState("login")
+          }, 1500)
         }
       })
-      .catch(() => setAuthState("login"))
+      .catch(() => {
+        setSessionToast("Session expired, please log in again")
+        setTimeout(() => {
+          setSessionToast("")
+          setAuthState("login")
+        }, 1500)
+      })
   }, [])
 
   // ── Load data when crm unlocked ──
@@ -460,6 +471,12 @@ export default function CRMPage() {
   if (authState === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        {sessionToast && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-5 py-3 rounded-xl shadow-xl z-[100] text-sm font-medium flex items-center gap-2">
+            <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            {sessionToast}
+          </div>
+        )}
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
           <p className="text-gray-500 text-sm">Loading CRM…</p>

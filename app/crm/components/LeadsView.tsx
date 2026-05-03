@@ -1574,7 +1574,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
               Delete {selectedLeadIds.size} lead{selectedLeadIds.size !== 1 ? 's' : ''}?
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              This will soft-delete the selected leads. They can be recovered from the Deleted filter.
+              This action cannot be undone. Leads will be soft-deleted.
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -1589,7 +1589,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {bulkLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Delete
+                Delete {selectedLeadIds.size} Lead{selectedLeadIds.size !== 1 ? 's' : ''}
               </button>
             </div>
           </div>
