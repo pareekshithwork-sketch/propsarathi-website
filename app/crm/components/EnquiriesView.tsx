@@ -147,7 +147,7 @@ export function EnquiriesView({ user, highlightId, onClearHighlight }: {
       if (search) params.set('search', search)
       if (overdue) params.set('overdue', 'true')
       if (dueToday) params.set('dueToday', 'true')
-      const res = await fetch(`/api/crm/v2/enquiries?${params}`)
+      const res = await fetch(`/api/crm/v2/enquiries?${params}`, { credentials: 'include' })
       const data = await res.json()
       if (data.success) {
         let list: any[] = data.enquiries || []
@@ -198,7 +198,7 @@ export function EnquiriesView({ user, highlightId, onClearHighlight }: {
   useEffect(() => { loadEnquiries() }, [loadEnquiries])
 
   useEffect(() => {
-    fetch('/api/crm/v2/users')
+    fetch('/api/crm/v2/users', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.users) setRms(d.users) })
       .catch(() => {})
@@ -210,7 +210,7 @@ export function EnquiriesView({ user, highlightId, onClearHighlight }: {
     if (needsLostReason && !stageForm.lostReason) return
     setStageSaving(true)
     try {
-      const res = await fetch(`/api/crm/v2/enquiries/${enquiryId}/stage`, {
+      const res = await fetch(`/api/crm/v2/enquiries/${enquiryId}/stage`, { credentials: 'include', 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -22,7 +22,7 @@ export function CRMProjectsBrochure({ user }: { user: any }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch('/api/crm/projects')
+    fetch('/api/crm/projects', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.projects) setProjects(data.projects) })
       .catch(() => {})

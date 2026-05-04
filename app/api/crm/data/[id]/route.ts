@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!record) return NextResponse.json({ success: false, message: 'Record not found' }, { status: 404 })
     return NextResponse.json({ success: true, record })
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'An error occurred' }, { status: 500 })
   }
 }
 
@@ -82,6 +82,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     `
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'An error occurred' }, { status: 500 })
   }
 }

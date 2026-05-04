@@ -16,7 +16,7 @@ export function BlogView() {
 
   async function loadPosts() {
     setLoading(true)
-    const res = await fetch('/api/crm/blog')
+    const res = await fetch('/api/crm/blog', { credentials: 'include' })
     const data = await res.json()
     setPosts(data.posts || [])
     setLoading(false)
@@ -39,9 +39,9 @@ export function BlogView() {
   async function save() {
     setSaving(true)
     if (editing) {
-      await fetch(`/api/crm/blog/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      await fetch(`/api/crm/blog/${editing.id}`, { credentials: 'include',  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     } else {
-      await fetch('/api/crm/blog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+      await fetch('/api/crm/blog', { credentials: 'include',  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
     }
     setSaving(false)
     setShowForm(false)
@@ -51,7 +51,7 @@ export function BlogView() {
   async function deletePost(id: number) {
     if (!confirm('Delete this post permanently?')) return
     setDeletingId(id)
-    await fetch(`/api/crm/blog/${id}`, { method: 'DELETE' })
+    await fetch(`/api/crm/blog/${id}`, { credentials: 'include',  method: 'DELETE' })
     setDeletingId(null)
     loadPosts()
   }

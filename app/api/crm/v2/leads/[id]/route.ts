@@ -17,8 +17,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!lead) return NextResponse.json({ success: false, error: 'Lead not found' }, { status: 404 })
 
     const [enquiries, listings, activityLogs, stageHistory, tasks] = await Promise.all([
-      sql`SELECT * FROM crm_enquiries WHERE lead_id = ${id} ORDER BY created_at DESC`,
-      sql`SELECT * FROM crm_listings WHERE lead_id = ${id} ORDER BY created_at DESC`,
+      sql`SELECT * FROM crm_enquiries WHERE lead_id = ${id} ORDER BY created_at DESC LIMIT 50`,
+      sql`SELECT * FROM crm_listings WHERE lead_id = ${id} ORDER BY created_at DESC LIMIT 50`,
       sql`SELECT id, lead_id, enquiry_id, listing_id, activity_type, title, description, performed_by, created_at
           FROM crm_activity_log WHERE lead_id = ${id} ORDER BY created_at DESC LIMIT 100`,
       sql`SELECT id, enquiry_id, lead_id, from_stage, to_stage, sub_stage, notes, lost_reason, changed_by, created_at
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({ success: true, lead, enquiries, listings, activity, tasks })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }
 
@@ -111,7 +111,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }
 
@@ -132,6 +132,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     `
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

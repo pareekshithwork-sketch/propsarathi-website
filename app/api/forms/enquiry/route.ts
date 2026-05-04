@@ -47,13 +47,7 @@ export async function POST(req: NextRequest) {
     // Auto-assign to RM with fewest open leads (unless overridden by referral chain)
     const assignedRM = await getAutoAssignRM()
 
-    // Write to Google Sheets Leads tab
-    await appendToSheet('Leads', [[
-      leadId, '', ts, '', '', name, '', phone,
-      email || '', '', '', 'New', assignedRM, notes, ts, '', '',
-    ]])
-
-    // Write to CRM DB leads table
+    // Write to CRM DB leads table (primary)
     let newLeadId: number | null = null
     try {
       const [inserted] = await sql`
@@ -70,7 +64,17 @@ export async function POST(req: NextRequest) {
       `
       newLeadId = inserted?.id ?? null
     } catch (dbErr) {
-      console.error('[Enquiry] DB insert failed (non-fatal):', dbErr)
+      console.error('[Enquiry] DB insert failed:', dbErr)
+    }
+
+    // Write to Google Sheets (non-fatal secondary)
+    try {
+      await appendToSheet('Leads', [[
+        leadId, '', ts, '', '', name, '', phone,
+        email || '', '', '', 'New', assignedRM, notes, ts, '', '',
+      ]])
+    } catch (sheetsErr) {
+      console.error('[Enquiry] Sheets write failed (non-fatal):', sheetsErr)
     }
 
     // Record referral chain

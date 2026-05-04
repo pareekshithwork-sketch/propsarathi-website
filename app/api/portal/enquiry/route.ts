@@ -3,9 +3,10 @@ import { verifyPortalToken } from '@/lib/portalAuth'
 import { getViewerByPhone, logPageView, updateViewerCRMLead } from '@/lib/projectsDb'
 import { addCRMLead, addCRMHistory, getCRMLeads } from '@/lib/crmSheets'
 import sql from '@/lib/db'
+import { checkAdminAuth } from '@/lib/adminAuth'
 
 export async function GET(req: NextRequest) {
-  if (req.headers.get('x-admin-key') !== process.env.ADMIN_SECRET_KEY) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {

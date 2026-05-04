@@ -12,8 +12,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const body = await request.json()
     const { reason = '', notes = '' } = body
 
-    const [enquiry] = await sql`SELECT lead_id FROM crm_enquiries WHERE enquiry_id = ${id}`
+    const [enquiry] = await sql`SELECT lead_id, status FROM crm_enquiries WHERE enquiry_id = ${id}`
     if (!enquiry) return NextResponse.json({ success: false, error: 'Enquiry not found' }, { status: 404 })
+    if (enquiry.status === 'closed') return NextResponse.json({ success: true, alreadyClosed: true })
 
     await sql`
       UPDATE crm_enquiries
@@ -36,6 +37,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

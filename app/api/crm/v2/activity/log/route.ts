@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { leadId, enquiryId, listingId, activityType, notes, duration, performedBy } = body
+    const { leadId, enquiryId, listingId, activityType, notes, duration } = body
 
     if (!leadId || !activityType) {
       return NextResponse.json({ success: false, error: 'leadId and activityType required' }, { status: 400 })
@@ -39,12 +39,12 @@ export async function POST(request: NextRequest) {
         ${title},
         ${notes || null},
         ${metadata},
-        ${performedBy || user.name}
+        ${user.name}
       )
     `
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

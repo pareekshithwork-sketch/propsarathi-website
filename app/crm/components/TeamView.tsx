@@ -42,7 +42,7 @@ export function TeamView({ user }: { user: any }) {
   async function loadMembers() {
     setLoading(true)
     try {
-      const res = await fetch('/api/crm/v2/users')
+      const res = await fetch('/api/crm/v2/users', { credentials: 'include' })
       const data = await res.json()
       if (data.success) setMembers(data.users)
     } catch {}
@@ -62,7 +62,7 @@ export function TeamView({ user }: { user: any }) {
     }
     setSaving(true)
     try {
-      const res = await fetch('/api/crm/v2/users', {
+      const res = await fetch('/api/crm/v2/users', { credentials: 'include', 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -86,7 +86,7 @@ export function TeamView({ user }: { user: any }) {
 
   async function toggleActive(member: any) {
     try {
-      const res = await fetch('/api/crm/v2/users', {
+      const res = await fetch('/api/crm/v2/users', { credentials: 'include', 
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: member.user_id, isActive: !member.is_active }),

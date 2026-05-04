@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!listing) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 })
     return NextResponse.json({ success: true, listing })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }
 
@@ -85,6 +85,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

@@ -69,12 +69,12 @@ export async function POST(request: NextRequest) {
           skipped++
         }
       } catch (e: any) {
-        errors.push(`${phone}: ${e.message}`)
+        errors.push(`: Failed to import`)
       }
     }
 
     return NextResponse.json({ success: true, imported, skipped, errors })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

@@ -62,7 +62,7 @@ export function PropertiesView({ user }: { user: any }) {
           if (propertyType) params.set('propertyType', propertyType)
           if (city) params.set('city', city)
           if (search) params.set('search', search)
-          return fetch(`/api/crm/v2/listings?${params}`).then(r => r.json())
+          return fetch(`/api/crm/v2/listings?${params}`, { credentials: 'include' }).then(r => r.json())
         })
       )
 

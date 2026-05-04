@@ -17,51 +17,34 @@ export async function POST(request: NextRequest) {
     const timestamp = new Date().toISOString()
     const { ipAddress, userAgent } = getClientInfo(request)
 
-    // Initialize headers if needed
-    await initializeSheetHeaders("ContactForms", [
-      "Timestamp",
-      "First Name",
-      "Last Name",
-      "Email",
-      "Phone",
-      "City",
-      "Property Type",
-      "Budget",
-      "Message",
-      "IP Address",
-      "User Agent",
-      "Status",
-    ])
+    // Log to Google Sheets (non-fatal)
+    try {
+      await initializeSheetHeaders("ContactForms", [
+        "Timestamp", "First Name", "Last Name", "Email", "Phone",
+        "City", "Property Type", "Budget", "Message", "IP Address", "User Agent", "Status",
+      ])
+      await appendToSheet("ContactForms", [[
+        timestamp, data.firstName, data.lastName, data.email, data.phone,
+        data.city, data.propertyType, data.budget, data.message || "",
+        ipAddress, userAgent, "New",
+      ]])
+    } catch (sheetsErr) {
+      console.error("[Contact] Sheets write failed (non-fatal):", sheetsErr)
+    }
 
-    // Append to Google Sheets
-    await appendToSheet("ContactForms", [
-      [
+    // Log activity (non-fatal)
+    try {
+      await logActivity({
         timestamp,
-        data.firstName,
-        data.lastName,
-        data.email,
-        data.phone,
-        data.city,
-        data.propertyType,
-        data.budget,
-        data.message || "",
+        activityType: "FORM_SUBMISSION",
+        userEmail: data.email,
+        userRole: "visitor",
+        description: `Contact form submitted by ${data.firstName} ${data.lastName}`,
         ipAddress,
         userAgent,
-        "New",
-      ],
-    ])
-
-    // Log activity
-    await logActivity({
-      timestamp,
-      activityType: "FORM_SUBMISSION",
-      userEmail: data.email,
-      userRole: "visitor",
-      description: `Contact form submitted by ${data.firstName} ${data.lastName}`,
-      ipAddress,
-      userAgent,
-      metadata: { city: data.city, propertyType: data.propertyType },
-    })
+        metadata: { city: data.city, propertyType: data.propertyType },
+      })
+    } catch { /* non-fatal */ }
 
     return NextResponse.json({
       success: true,

@@ -11,13 +11,7 @@ export async function GET(request: NextRequest) {
   const rmName = user.name
 
   try {
-    const [
-      overdueEnquiries,
-      dueTodayEnquiries,
-      siteVisitsToday,
-      statsRows,
-      recentActivity,
-    ] = await Promise.all([
+    const results = await Promise.allSettled([
       // Overdue: scheduled_at < NOW(), still active, not in terminal stages
       sql`
         SELECT
@@ -108,6 +102,12 @@ export async function GET(request: NextRequest) {
       `,
     ])
 
+    const overdueEnquiries = results[0].status === 'fulfilled' ? results[0].value : []
+    const dueTodayEnquiries = results[1].status === 'fulfilled' ? results[1].value : []
+    const siteVisitsToday = results[2].status === 'fulfilled' ? results[2].value : []
+    const statsRows = results[3].status === 'fulfilled' ? results[3].value : []
+    const recentActivity = results[4].status === 'fulfilled' ? results[4].value : []
+
     const s = statsRows[0] || {}
     return NextResponse.json({
       success: true,
@@ -123,6 +123,6 @@ export async function GET(request: NextRequest) {
       recentActivity,
     })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

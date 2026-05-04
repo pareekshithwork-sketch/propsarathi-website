@@ -103,7 +103,7 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
       if (statusFilter) params.set('status', statusFilter)
       if (city) params.set('city', city)
       if (propertyType) params.set('propertyType', propertyType)
-      const res = await fetch(`/api/crm/v2/listings?${params}`)
+      const res = await fetch(`/api/crm/v2/listings?${params}`, { credentials: 'include' })
       const data = await res.json()
       if (data.success) setListings(data.listings || [])
     } catch (e) {
@@ -120,9 +120,9 @@ export function ListingsView({ user, highlightId, onClearHighlight }: {
     try {
       const res = await fetch(`/api/crm/v2/listings/${listingId}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, ...extra }),
-        credentials: 'include',
       })
       const data = await res.json()
       if (!data.success) throw new Error(data.error)
@@ -525,7 +525,7 @@ function AddListingPanel({ user, onClose, onSuccess }: {
     if (q.length < 2) { setLeadResults([]); return }
     setLeadSearchLoading(true)
     try {
-      const res = await fetch(`/api/crm/v2/leads?search=${encodeURIComponent(q)}&limit=10`)
+      const res = await fetch(`/api/crm/v2/leads?search=${encodeURIComponent(q)}&limit=10`, { credentials: 'include' })
       const data = await res.json()
       if (data.leads) setLeadResults(data.leads)
     } catch {}
@@ -555,7 +555,7 @@ function AddListingPanel({ user, onClose, onSuccess }: {
         currency: form.currency,
         sellerNotes: form.sellerNotes,
       }
-      const res = await fetch('/api/crm/v2/listings', {
+      const res = await fetch('/api/crm/v2/listings', { credentials: 'include', 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

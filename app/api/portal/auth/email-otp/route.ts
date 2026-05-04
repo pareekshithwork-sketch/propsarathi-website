@@ -60,6 +60,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: false, message: 'Invalid action' }, { status: 400 })
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'An error occurred' }, { status: 500 })
   }
 }

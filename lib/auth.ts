@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
+const _authSecret = process.env.JWT_SECRET
+if (!_authSecret) throw new Error("JWT_SECRET environment variable is not set")
+const JWT_SECRET: string = _authSecret
 
 export interface JWTPayload {
   userId: string

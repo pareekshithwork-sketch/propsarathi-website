@@ -12,6 +12,16 @@ export async function PATCH(request: NextRequest) {
   if (!taskId) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 })
 
   try {
+    // RM can only complete tasks for leads assigned to them
+    if (user.role === 'rm') {
+      const [task] = await sql`
+        SELECT t.id FROM crm_tasks t
+        JOIN crm_leads_v2 l ON l.lead_id = t.lead_id
+        WHERE t.id = ${taskId} AND l.assigned_rm = ${user.name}
+      `
+      if (!task) return NextResponse.json({ success: false, error: 'Task not found or unauthorized' }, { status: 403 })
+    }
+
     await sql`
       UPDATE crm_tasks
       SET status = 'done', completed_at = NOW(), completed_by = ${user.name}
@@ -19,7 +29,7 @@ export async function PATCH(request: NextRequest) {
     `
     return NextResponse.json({ success: true })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }
 
@@ -44,6 +54,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, task })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

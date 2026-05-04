@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { checkAdminAuth } from "@/lib/adminAuth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -29,13 +30,13 @@ export async function GET(req: Request) {
       }
     })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }
 
 // POST — save uploaded KML layers (admin only via admin-key header)
-export async function POST(req: Request) {
-  if (req.headers.get("x-admin-key") !== process.env.ADMIN_SECRET_KEY) {
+export async function POST(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
@@ -53,13 +54,13 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(inserted)
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }
 
 // DELETE — delete all layers for a file_name (admin only)
-export async function DELETE(req: Request) {
-  if (req.headers.get("x-admin-key") !== process.env.ADMIN_SECRET_KEY) {
+export async function DELETE(req: NextRequest) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
@@ -67,6 +68,6 @@ export async function DELETE(req: Request) {
     await sql`DELETE FROM map_layers WHERE file_name = ${fileName}`
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }

@@ -105,7 +105,7 @@ export default function CRMPage() {
 
   // ── Auth check on mount ──
   useEffect(() => {
-    fetch("/api/crm/auth/me")
+    fetch("/api/crm/auth/me", { credentials: "include" })
       .then(r => r.json())
       .then(d => {
         if (d.success && d.user) {
@@ -141,10 +141,10 @@ export default function CRMPage() {
       loadProjects()
     }
     if (view === "clients" && user?.role === "admin") {
-      fetch("/api/crm/clients").then(r => r.json()).then(d => { if (d.clients) setClientsList(d.clients) })
+      fetch("/api/crm/clients", { credentials: "include" }).then(r => r.json()).then(d => { if (d.clients) setClientsList(d.clients) })
     }
     if (view === "referrals" && user?.role === "admin") {
-      fetch("/api/crm/referrals").then(r => r.json()).then(d => {
+      fetch("/api/crm/referrals", { credentials: "include" }).then(r => r.json()).then(d => {
         if (d.referrals) setReferralsList(d.referrals)
         if (d.docViews) setDocViewsList(d.docViews)
       })
@@ -154,15 +154,19 @@ export default function CRMPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [leadsRes, dataRes, statsRes, v2Res, dashRes] = await Promise.all([
-        fetch("/api/crm/leads"),
-        fetch("/api/crm/data"),
-        fetch("/api/crm/stats"),
-        fetch("/api/crm/v2/leads?limit=200"),
-        fetch("/api/crm/v2/dashboard"),
+      const [leadsRes, dataRes, statsRes, v2Res, dashRes] = await Promise.allSettled([
+        fetch("/api/crm/leads", { credentials: "include" }),
+        fetch("/api/crm/data", { credentials: "include" }),
+        fetch("/api/crm/stats", { credentials: "include" }),
+        fetch("/api/crm/v2/leads?limit=200", { credentials: "include" }),
+        fetch("/api/crm/v2/dashboard", { credentials: "include" }),
       ])
-      const [ld, dd, sd, v2d, dashd] = await Promise.all([
-        leadsRes.json(), dataRes.json(), statsRes.json(), v2Res.json(), dashRes.json(),
+      const [ld, dd, sd, v2d, dashd]: any[] = await Promise.all([
+        leadsRes.status === 'fulfilled' ? leadsRes.value.json() : {},
+        dataRes.status === 'fulfilled' ? dataRes.value.json() : {},
+        statsRes.status === 'fulfilled' ? statsRes.value.json() : {},
+        v2Res.status === 'fulfilled' ? v2Res.value.json() : {},
+        dashRes.status === 'fulfilled' ? dashRes.value.json() : {},
       ])
       if (ld.success) setLeads(ld.leads || [])
       if (dd.success) setDataRecords(dd.records || [])
@@ -179,7 +183,7 @@ export default function CRMPage() {
   async function loadProjects() {
     setProjectsLoading(true)
     try {
-      const res = await fetch("/api/crm/projects")
+      const res = await fetch("/api/crm/projects", { credentials: "include" })
       const data = await res.json()
       if (data.success) setCrmProjects(data.projects || [])
     } catch (e) { console.error(e) }
@@ -211,7 +215,7 @@ export default function CRMPage() {
   }
 
   async function handleLogout() {
-    await fetch("/api/crm/auth/logout", { method: "POST" })
+    await fetch("/api/crm/auth/logout", { method: "POST", credentials: "include" })
     setUser(null)
     setAuthState("login")
   }
@@ -223,7 +227,7 @@ export default function CRMPage() {
     setDetailTab("overview")
     setShowStatusAction(null)
     try {
-      const res = await fetch(`/api/crm/leads/${lead.leadId}`)
+      const res = await fetch(`/api/crm/leads/${lead.leadId}`, { credentials: "include" })
       const d = await res.json()
       if (d.success) {
         setSelectedLead(d.lead)
@@ -256,6 +260,7 @@ export default function CRMPage() {
 
       await fetch(`/api/crm/leads/${selectedLead.leadId}`, {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
@@ -290,6 +295,7 @@ export default function CRMPage() {
     try {
       await fetch(`/api/crm/leads/${selectedLead.leadId}`, {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lastNote: addNoteText }),
       })
@@ -298,7 +304,7 @@ export default function CRMPage() {
       setLeads(prev => prev.map(l => l.leadId === updated.leadId ? updated : l))
       setAddNoteText("")
       // Refresh history
-      const res = await fetch(`/api/crm/leads/${selectedLead.leadId}`)
+      const res = await fetch(`/api/crm/leads/${selectedLead.leadId}`, { credentials: "include" })
       const d = await res.json()
       if (d.success) setLeadHistory(d.history || [])
     } catch {}
@@ -312,7 +318,7 @@ export default function CRMPage() {
     }
     const typed = prompt(`Type DELETE to confirm removing lead "${lead.clientName}":`)
     if (typed !== 'DELETE') return
-    await fetch(`/api/crm/leads/${lead.leadId}`, { method: "DELETE" })
+    await fetch(`/api/crm/leads/${lead.leadId}`, { method: "DELETE", credentials: "include" })
     setLeads(prev => prev.filter(l => l.leadId !== lead.leadId))
     if (selectedLead?.leadId === lead.leadId) setSelectedLead(null)
   }
@@ -339,6 +345,7 @@ export default function CRMPage() {
       if (editingLead) {
         await fetch(`/api/crm/leads/${editingLead.leadId}`, {
           method: "PUT",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(leadForm),
         })
@@ -347,6 +354,7 @@ export default function CRMPage() {
       } else {
         const res = await fetch("/api/crm/leads", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(leadForm),
         })
@@ -357,7 +365,10 @@ export default function CRMPage() {
         }
       }
       setShowAddLead(false)
-    } catch {}
+    } catch (e) {
+      console.error("saveLead error:", e)
+      alert("Failed to save lead. Please try again.")
+    }
     setSavingLead(false)
   }
 
@@ -368,6 +379,7 @@ export default function CRMPage() {
     try {
       const res = await fetch("/api/crm/data", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newData),
       })
@@ -378,7 +390,10 @@ export default function CRMPage() {
         setShowAddData(false)
         setNewData({ source: "Direct", name: "", phone: "", countryCode: "+91", email: "", dob: "", gender: "", notes: "" })
       }
-    } catch {}
+    } catch (e) {
+      console.error("saveData error:", e)
+      alert("Failed to save record. Please try again.")
+    }
     setSavingData(false)
   }
 
@@ -832,9 +847,9 @@ export default function CRMPage() {
                   projects={crmProjects}
                   loading={projectsLoading}
                   onRefresh={loadProjects}
-                  onUpdate={(id: number, data: any) => fetch(`/api/crm/projects/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
-                  onDelete={(id: number) => fetch(`/api/crm/projects/${id}`, { method: 'DELETE' }).then(loadProjects)}
-                  onCreate={(data: any) => fetch('/api/crm/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
+                  onUpdate={(id: number, data: any) => fetch(`/api/crm/projects/${id}`, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
+                  onDelete={(id: number) => fetch(`/api/crm/projects/${id}`, { method: 'DELETE', credentials: 'include' }).then(loadProjects)}
+                  onCreate={(data: any) => fetch('/api/crm/projects', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(loadProjects)}
                 />
               )
               : <CRMProjectsBrochure user={user} />

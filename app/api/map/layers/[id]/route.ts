@@ -1,11 +1,12 @@
 import { neon } from "@neondatabase/serverless"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { checkAdminAuth } from "@/lib/adminAuth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
 // PATCH — toggle visible / change color (admin only)
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (req.headers.get("x-admin-key") !== process.env.ADMIN_SECRET_KEY) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
@@ -32,13 +33,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: true })
   } catch (e) {
     console.error("PATCH map layer error:", e)
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }
 
 // DELETE — delete a single layer (admin only)
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (req.headers.get("x-admin-key") !== process.env.ADMIN_SECRET_KEY) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!checkAdminAuth(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   try {
@@ -46,6 +47,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     await sql`DELETE FROM map_layers WHERE id = ${id}`
     return NextResponse.json({ ok: true })
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }

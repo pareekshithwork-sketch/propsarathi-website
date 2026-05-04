@@ -83,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, records: mapped })
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'An error occurred' }, { status: 500 })
   }
 }
 
@@ -106,6 +106,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, dataId: row.data_id })
   } catch (e: any) {
-    return NextResponse.json({ success: false, message: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'An error occurred' }, { status: 500 })
   }
 }

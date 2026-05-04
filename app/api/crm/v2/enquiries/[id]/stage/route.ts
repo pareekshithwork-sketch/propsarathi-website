@@ -2,6 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
 
+const VALID_STAGES = new Set([
+  'New Lead', 'Contacted', 'Follow Up', 'Proposal Sent',
+  'Schedule Site Visit', 'Site Visit Done', 'Negotiation',
+  'Book', 'Not Interested', 'Drop',
+])
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const token = request.cookies.get('crm_token')?.value
   const user = verifyCRMToken(token || '')
@@ -13,6 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { stage, subStage = '', notes, scheduledAt, lostReason = '', bookingName, bookingDate, agreementValue } = body
 
     if (!stage) return NextResponse.json({ success: false, error: 'stage is required' }, { status: 400 })
+    if (!VALID_STAGES.has(stage)) return NextResponse.json({ success: false, error: 'Invalid stage value' }, { status: 400 })
     if (!notes || !String(notes).trim()) {
       return NextResponse.json({ success: false, error: 'Notes are required' }, { status: 400 })
     }
@@ -95,6 +102,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const [enquiry] = await sql`SELECT * FROM crm_enquiries WHERE enquiry_id = ${id}`
     return NextResponse.json({ success: true, enquiry })
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 })
+    return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
 }

@@ -303,7 +303,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
 
   // ── Load RMs ──
   useEffect(() => {
-    fetch('/api/crm/v2/users')
+    fetch('/api/crm/v2/users', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.users) setRms(d.users) })
       .catch(() => {})
@@ -469,7 +469,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
   async function loadEnquiryView() {
     setEnquiryViewLoading(true)
     try {
-      const res = await fetch('/api/crm/v2/enquiries?status=active&limit=500')
+      const res = await fetch('/api/crm/v2/enquiries?status=active&limit=500', { credentials: 'include' })
       const data = await res.json()
       if (data.success) setEnquiryViewData(data.enquiries || [])
     } catch {}
@@ -488,7 +488,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
     setExpandedLeads(next)
     if (!expandedLeadData[leadId]) {
       try {
-        const res = await fetch(`/api/crm/v2/leads/${leadId}`)
+        const res = await fetch(`/api/crm/v2/leads/${leadId}`, { credentials: 'include' })
         const data = await res.json()
         if (data.success) setExpandedLeadData(prev => ({ ...prev, [leadId]: data.enquiries || [] }))
       } catch {}
@@ -3058,7 +3058,7 @@ function AddLeadModal({ onClose, onSuccess, user, editingLead }: {
   const [checkingDup, setCheckingDup] = useState(false)
 
   React.useEffect(() => {
-    fetch('/api/crm/v2/users')
+    fetch('/api/crm/v2/users', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.users) setRms(d.users) })
       .catch(() => {})
@@ -3091,7 +3091,7 @@ function AddLeadModal({ onClose, onSuccess, user, editingLead }: {
     if (!form.phone || form.phone.length < 6) return
     setCheckingDup(true)
     try {
-      const res = await fetch(`/api/crm/v2/leads?search=${encodeURIComponent(form.phone)}&limit=5`)
+      const res = await fetch(`/api/crm/v2/leads?search=${encodeURIComponent(form.phone)}&limit=5`, { credentials: 'include' })
       const data = await res.json()
       if (data.leads?.length > 0) {
         const clean = form.phone.replace(/\D/g, '').slice(-10)

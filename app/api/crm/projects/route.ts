@@ -69,6 +69,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, id })
   } catch (e: any) {
     console.error('[CRM Projects POST]', e)
-    return NextResponse.json({ error: e.message || 'Failed' }, { status: 500 })
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }

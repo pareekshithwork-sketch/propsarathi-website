@@ -5,7 +5,9 @@ import { loginSchema, validateData } from "@/lib/validation"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production"
+const _partnerSecret = process.env.JWT_SECRET
+if (!_partnerSecret) throw new Error("JWT_SECRET environment variable is not set")
+const JWT_SECRET: string = _partnerSecret
 
 export async function POST(request: NextRequest) {
   try {

@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { updateProject, deleteProject } from '@/lib/projectsDb'
-
-function checkAuth(req: NextRequest) {
-  return req.headers.get('x-admin-key') === process.env.ADMIN_SECRET_KEY
-}
+import { checkAdminAuth } from '@/lib/adminAuth'
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!checkAdminAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
   const data = await req.json()
   await updateProject(Number(id), data)
@@ -14,7 +11,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!checkAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!checkAdminAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
   await deleteProject(Number(id))
   return NextResponse.json({ success: true })
