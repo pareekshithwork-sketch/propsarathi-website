@@ -15,6 +15,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'leadIds and action required' }, { status: 400 })
     }
 
+    const VALID_BULK_STAGES = new Set([
+      'New', 'Callback', 'Schedule Meeting', 'Schedule Site Visit',
+      'Expression Of Interest', 'Book', 'Not Interested', 'Drop',
+    ])
+    if (action === 'stage' && !VALID_BULK_STAGES.has(value)) {
+      return NextResponse.json({ success: false, error: 'Invalid stage value' }, { status: 400 })
+    }
+
     let updated = 0
 
     if (action === 'reassign') {

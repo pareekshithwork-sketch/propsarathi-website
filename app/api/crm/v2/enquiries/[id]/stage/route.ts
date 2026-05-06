@@ -3,9 +3,8 @@ import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
 
 const VALID_STAGES = new Set([
-  'New Lead', 'Contacted', 'Follow Up', 'Proposal Sent',
-  'Schedule Site Visit', 'Site Visit Done', 'Negotiation',
-  'Book', 'Not Interested', 'Drop',
+  'New', 'Callback', 'Schedule Meeting', 'Schedule Site Visit',
+  'Expression Of Interest', 'Book', 'Not Interested', 'Drop',
 ])
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

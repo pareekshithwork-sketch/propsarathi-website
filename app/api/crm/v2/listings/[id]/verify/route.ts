@@ -7,10 +7,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const user = verifyCRMToken(token || '')
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
+  const isAdmin = user.role === 'admin' || user.role === 'super_admin'
+  const isRm = user.role === 'rm'
+  if (!isRm && !isAdmin) {
+    return NextResponse.json({ success: false, error: 'RM or admin access required' }, { status: 403 })
+  }
+
   const { id } = await params
   try {
-    const [listing] = await sql`SELECT lead_id FROM crm_listings WHERE listing_id = ${id}`
+    const [listing] = await sql`
+      SELECT ls.lead_id, l.assigned_rm
+      FROM crm_listings ls
+      JOIN crm_leads_v2 l ON l.lead_id = ls.lead_id
+      WHERE ls.listing_id = ${id}
+    `
     if (!listing) return NextResponse.json({ success: false, error: 'Listing not found' }, { status: 404 })
+
+    if (isRm && listing.assigned_rm !== user.name) {
+      return NextResponse.json({ success: false, error: 'You can only verify listings for your own leads' }, { status: 403 })
+    }
 
     await sql`
       UPDATE crm_listings

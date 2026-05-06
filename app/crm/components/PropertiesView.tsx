@@ -56,7 +56,7 @@ export function PropertiesView({ user }: { user: any }) {
         ? [statusFilter]
         : ['rm_verified', 'admin_approved', 'live']
 
-      const results = await Promise.all(
+      const settled = await Promise.allSettled(
         statuses.map(s => {
           const params = new URLSearchParams({ status: s, limit: '200' })
           if (propertyType) params.set('propertyType', propertyType)
@@ -65,6 +65,7 @@ export function PropertiesView({ user }: { user: any }) {
           return fetch(`/api/crm/v2/listings?${params}`, { credentials: 'include' }).then(r => r.json())
         })
       )
+      const results = settled.map(r => r.status === 'fulfilled' ? r.value : {})
 
       const combined: any[] = []
       const seen = new Set<string>()

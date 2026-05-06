@@ -14,6 +14,13 @@ export async function POST(request: NextRequest) {
     if (!name?.trim() || !phone?.trim()) {
       return NextResponse.json({ success: false, error: 'Name and phone are required' }, { status: 400 })
     }
+    const cleanedPhone = phone.replace(/\D/g, '')
+    if (cleanedPhone.length < 7 || cleanedPhone.length > 15) {
+      return NextResponse.json({ success: false, error: 'Invalid phone number' }, { status: 400 })
+    }
+    if (askingPrice && Number(askingPrice) < 0) {
+      return NextResponse.json({ success: false, error: 'Price must be positive' }, { status: 400 })
+    }
 
     // Match existing lead by last 10 digits of phone
     const cleanPhone = phone.replace(/\D/g, '').slice(-10)

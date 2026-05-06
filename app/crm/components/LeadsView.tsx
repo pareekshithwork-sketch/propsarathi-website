@@ -330,8 +330,8 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
     try {
       const res = await fetch('/api/crm/v2/enquiries', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           leadId: profileLead.lead_id,
           propertyType: addEnqForm.propertyType,
@@ -435,6 +435,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
     setBulkLoading(true)
     try {
       const res = await fetch('/api/crm/v2/leads/bulk', {
+        credentials: 'include',
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadIds, action, value }),
@@ -966,12 +967,21 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                   const waMsg = encodeURIComponent(`Hi ${lead.name}, this is ${user?.name || 'PropSarathi Team'} from PropSarathi.`)
                   const score = leadScore(lead.latest_enquiry_stage)
                   const isExpanded = expandedLeads.has(lead.lead_id)
+                  const isOverdue = !!(
+                    lead.latest_scheduled_at &&
+                    new Date(lead.latest_scheduled_at) < new Date() &&
+                    (lead.latest_enquiry_stage === 'Schedule Meeting' || lead.latest_enquiry_stage === 'Schedule Site Visit')
+                  )
 
                   return (
                     <React.Fragment key={lead.lead_id}>
                       <tr
                         onClick={() => selectLead(lead)}
-                        className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                        className={`border-b cursor-pointer transition-colors ${
+                          isSelected ? 'bg-purple-50 border-purple-100' :
+                          isOverdue  ? 'bg-orange-50 border-orange-100 hover:bg-orange-100' :
+                                       'border-gray-100 hover:bg-gray-50'
+                        }`}
                       >
                         <td className="px-3 py-4 w-8" onClick={e => e.stopPropagation()}>
                           <input
@@ -1057,7 +1067,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                         )}
                         {visibleColumns.has('latest_scheduled_at') && (
                           <td className="px-3 py-4 w-24">
-                            <p className="text-xs text-gray-500">{lead.latest_scheduled_at ? formatDate(lead.latest_scheduled_at) : '—'}</p>
+                            <p className={`text-xs font-medium ${isOverdue ? 'text-orange-600' : 'text-gray-500'}`}>{lead.latest_scheduled_at ? formatDate(lead.latest_scheduled_at) : '—'}</p>
                           </td>
                         )}
                         {visibleColumns.has('email') && (
@@ -1655,8 +1665,8 @@ function LogActionModal({ type, lead, enquiries, listings, user, onClose, onSucc
       const listingId = selectedContext.startsWith('ls_') ? selectedContext.slice(3) : ''
       const res = await fetch('/api/crm/v2/activity/log', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           leadId: lead.lead_id,
           enquiryId: enquiryId || undefined,
@@ -1790,8 +1800,8 @@ function PanelEnquiryCard({ enq, lead, user, onNavigate, onOpenLog, onRefresh, s
     try {
       const res = await fetch(`/api/crm/v2/enquiries/${enq.enquiry_id}/stage`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stage: stageForm.stage,
           subStage: stageForm.subStage,
@@ -1959,8 +1969,8 @@ function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, sh
       if (visitNotes.trim()) body.rmVisitNotes = visitNotes
       const res = await fetch(`/api/crm/v2/listings/${ls.listing_id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       const data = await res.json()
@@ -2128,6 +2138,7 @@ function EnquiriesTab({ enquiries, leadId, onRefresh, showToast }: {
     setStageSaving(true)
     try {
       const res = await fetch(`/api/crm/v2/enquiries/${enquiryId}/stage`, {
+        credentials: 'include',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2156,6 +2167,7 @@ function EnquiriesTab({ enquiries, leadId, onRefresh, showToast }: {
     setAddSaving(true)
     try {
       const res = await fetch('/api/crm/v2/enquiries', {
+        credentials: 'include',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2709,6 +2721,7 @@ function ListingsTab({ listings, leadId, onRefresh, showToast }: {
     setSaving(true)
     try {
       const res = await fetch('/api/crm/v2/listings', {
+        credentials: 'include',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2899,6 +2912,7 @@ function TasksTab({ tasks, leadId, onRefresh, showToast, rms }: {
     setSaving(true)
     try {
       const res = await fetch('/api/crm/v2/tasks', {
+        credentials: 'include',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leadId, ...form }),
@@ -3131,6 +3145,7 @@ function AddLeadModal({ onClose, onSuccess, user, editingLead }: {
       let data: any
       if (editingLead) {
         res = await fetch(`/api/crm/v2/leads/${editingLead.lead_id}`, {
+          credentials: 'include',
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -3146,6 +3161,7 @@ function AddLeadModal({ onClose, onSuccess, user, editingLead }: {
         if (data.success) onSuccess(editingLead.lead_id)
       } else {
         res = await fetch('/api/crm/v2/leads', {
+          credentials: 'include',
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
         })
         data = await res.json()

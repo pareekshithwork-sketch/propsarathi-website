@@ -140,6 +140,16 @@ export async function POST(request: NextRequest) {
     if (!name || !phone) {
       return NextResponse.json({ success: false, error: 'Name and phone are required' }, { status: 400 })
     }
+    if (name.trim().length > 100) {
+      return NextResponse.json({ success: false, error: 'Name is too long' }, { status: 400 })
+    }
+    const cleanedPhone = phone.replace(/\D/g, '')
+    if (cleanedPhone.length < 7 || cleanedPhone.length > 15) {
+      return NextResponse.json({ success: false, error: 'Invalid phone number' }, { status: 400 })
+    }
+    if (email && email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json({ success: false, error: 'Invalid email format' }, { status: 400 })
+    }
 
     // Duplicate check — compare last 10 digits
     const cleanPhone = phone.replace(/\D/g, '').slice(-10)

@@ -53,6 +53,9 @@ export async function POST(request: NextRequest) {
     if (!leadId) {
       return NextResponse.json({ success: false, error: 'leadId is required' }, { status: 400 })
     }
+    if (askingPrice && Number(askingPrice) < 0) {
+      return NextResponse.json({ success: false, error: 'Price must be positive' }, { status: 400 })
+    }
 
     const [listing] = await sql`
       INSERT INTO crm_listings

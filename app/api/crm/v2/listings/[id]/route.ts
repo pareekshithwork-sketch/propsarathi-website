@@ -35,6 +35,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const newStatus = b.status ?? null
     const newIsLive = (b.isLive ?? b.is_live) ?? null
 
+    const isAdmin = user.role === 'admin' || user.role === 'super_admin'
+    if ((newStatus === 'admin_approved' || newIsLive === true) && !isAdmin) {
+      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
+    }
+
     await sql`
       UPDATE crm_listings SET
         status             = COALESCE(${newStatus}, status),
