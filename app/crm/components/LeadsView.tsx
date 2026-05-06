@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState, useMemo, useEffect, useRef } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
-  X, Check, Loader2, MoreHorizontal, Trash2, Calendar, FileText,
-  Activity, TrendingUp, Building2, Filter, Pencil, ChevronRight, ChevronDown,
-  SlidersHorizontal, MapPin, Home,
+  X, Check, Loader2, Trash2, Calendar, FileText,
+  Activity, TrendingUp, Building2, Filter, Pencil, ChevronRight, ChevronDown, ChevronUp,
+  SlidersHorizontal, MapPin, Home, Pin, ArrowUpDown,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -124,7 +124,8 @@ const SEARCH_FIELD_OPTIONS = [
 ]
 
 const COLUMNS_CONFIG = [
-  { id: 'modified',             label: 'Assigned / Modified', defaultOn: true },
+  { id: 'assigned_rm',          label: 'Assigned To',         defaultOn: true },
+  { id: 'modified',             label: 'Modified',            defaultOn: true },
   { id: 'phone',                label: 'Phone',               defaultOn: true },
   { id: 'last_note',            label: 'Notes',               defaultOn: true },
   { id: 'source',               label: 'Source',              defaultOn: true },
@@ -277,6 +278,25 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
 
   // (enquiry form state lives inside EnquiriesTab)
 
+  // ── Sort ──
+  const [sortBy, setSortBy] = useState<'updated_at' | 'created_at' | 'assigned_rm'>('updated_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  // ── Add Listing from panel ──
+  const [showAddListing, setShowAddListing] = useState(false)
+  const [addListForm, setAddListForm] = useState({
+    title: '', propertyType: '', bedrooms: '', areaSqft: '',
+    city: '', locality: '', askingPrice: '', currency: 'INR',
+    floorNumber: '', possessionStatus: '', sellerNotes: '',
+  })
+  const [addListSaving, setAddListSaving] = useState(false)
+
+  // ── Timeline search ──
+  const [timelineSearch, setTimelineSearch] = useState('')
+
+  // ── Pinned enquiries (per lead, persisted in localStorage) ──
+  const [pinnedEnquiries, setPinnedEnquiries] = useState<Set<string>>(new Set())
+
   // ── View mode ──
   const [viewMode, setViewMode] = useState<'people' | 'enquiry'>('people')
   const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set())
@@ -312,6 +332,64 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
+  }
+
+  // Load pinned enquiries from localStorage when panel opens
+  useEffect(() => {
+    if (!profileLead) { setPinnedEnquiries(new Set()); return }
+    try {
+      const saved = localStorage.getItem(`pinned_enquiries_${profileLead.lead_id}`)
+      setPinnedEnquiries(saved ? new Set(JSON.parse(saved)) : new Set())
+    } catch { setPinnedEnquiries(new Set()) }
+  }, [profileLead?.lead_id])
+
+  function togglePin(enquiryId: string, leadId: string) {
+    setPinnedEnquiries(prev => {
+      const next = new Set(prev)
+      if (next.has(enquiryId)) next.delete(enquiryId)
+      else next.add(enquiryId)
+      try { localStorage.setItem(`pinned_enquiries_${leadId}`, JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
+  async function handleAddListing() {
+    if (!profileLead || !addListForm.propertyType) return
+    setAddListSaving(true)
+    const bedsNum = Number(addListForm.bedrooms) || 0
+    const autoTitle = addListForm.title ||
+      `${bedsNum > 0 ? bedsNum + 'BHK ' : ''}${addListForm.propertyType}${addListForm.locality ? ', ' + addListForm.locality : ''}${addListForm.city ? ', ' + addListForm.city : ''}`
+    try {
+      const res = await fetch('/api/crm/v2/listings', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: profileLead.lead_id,
+          title: autoTitle,
+          propertyType: addListForm.propertyType,
+          bedrooms: bedsNum,
+          areaSqft: Number(addListForm.areaSqft) || 0,
+          city: addListForm.city,
+          locality: addListForm.locality,
+          askingPrice: Number(addListForm.askingPrice) || 0,
+          currency: addListForm.currency,
+          floorNumber: Number(addListForm.floorNumber) || 0,
+          possessionStatus: addListForm.possessionStatus,
+          sellerNotes: addListForm.sellerNotes,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setShowAddListing(false)
+      setAddListForm({ title: '', propertyType: '', bedrooms: '', areaSqft: '', city: '', locality: '', askingPrice: '', currency: 'INR', floorNumber: '', possessionStatus: '', sellerNotes: '' })
+      showToast('Listing added successfully')
+      reloadProfile()
+    } catch (e: any) {
+      showToast(e.message || 'Error adding listing')
+    } finally {
+      setAddListSaving(false)
+    }
   }
 
   function reloadProfile() {
@@ -419,12 +497,18 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
     }
 
     return [...result].sort((a, b) => {
-      const fieldName = DATE_FIELD_MAP[dateType] || 'updated_at'
+      if (sortBy === 'assigned_rm') {
+        const aV = (a.assigned_rm || '').toLowerCase()
+        const bV = (b.assigned_rm || '').toLowerCase()
+        const cmp = aV.localeCompare(bV)
+        return sortDir === 'asc' ? cmp : -cmp
+      }
+      const fieldName = sortBy === 'created_at' ? 'created_at' : 'updated_at'
       const aT = a[fieldName] ? new Date(a[fieldName]).getTime() : 0
       const bT = b[fieldName] ? new Date(b[fieldName]).getTime() : 0
-      return bT - aT
+      return sortDir === 'desc' ? bT - aT : aT - bT
     })
-  }, [v2Leads, stageTab, debouncedSearch, filters, dateType, dateFrom, dateTo, searchFields])
+  }, [v2Leads, stageTab, debouncedSearch, filters, dateType, dateFrom, dateTo, searchFields, sortBy, sortDir])
 
   const allSelected = filteredLeads.length > 0 && filteredLeads.every((l: any) => selectedLeadIds.has(l.lead_id))
   const someSelected = filteredLeads.some((l: any) => selectedLeadIds.has(l.lead_id))
@@ -505,6 +589,28 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
   useEffect(() => {
     if (viewMode === 'enquiry') loadEnquiryView()
   }, [viewMode])
+
+  // ── Keyboard shortcuts (only when panel is open) ──
+  useEffect(() => {
+    if (!profileLead) return
+    const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+    function onKeyDown(e: KeyboardEvent) {
+      const mod = isMac ? e.metaKey : e.ctrlKey
+      if (mod && e.key === 'e') { e.preventDefault(); setShowAddEnquiry(true) }
+      if (mod && e.key === 'l') { e.preventDefault(); setShowAddListing(true) }
+      if (mod && e.key === 'n') {
+        e.preventDefault()
+        setLogModal({ type: 'note', lead: profileLead, enquiries: (profileDetail?.enquiries || []).filter((e: any) => e.status === 'active'), listings: profileDetail?.listings || [] })
+      }
+      if (e.key === 'Escape') {
+        if (showAddEnquiry) { setShowAddEnquiry(false); return }
+        if (showAddListing) { setShowAddListing(false); return }
+        setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [profileLead, profileDetail, showAddEnquiry, showAddListing])
 
 
   return (
@@ -945,12 +1051,28 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                     />
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide">Lead Name</th>
-                  {visibleColumns.has('modified') && <th className="px-3 py-3 w-28 text-left text-xs font-semibold uppercase tracking-wide">Assigned / Modified</th>}
+                  {visibleColumns.has('assigned_rm') && (
+                    <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide cursor-pointer hover:bg-gray-800 select-none"
+                      onClick={() => { if (sortBy === 'assigned_rm') setSortDir(d => d === 'desc' ? 'asc' : 'desc'); else { setSortBy('assigned_rm'); setSortDir('asc') } }}>
+                      <span className="flex items-center gap-1">Assigned {sortBy === 'assigned_rm' ? (sortDir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
+                    </th>
+                  )}
+                  {visibleColumns.has('modified') && (
+                    <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide cursor-pointer hover:bg-gray-800 select-none"
+                      onClick={() => { if (sortBy === 'updated_at') setSortDir(d => d === 'desc' ? 'asc' : 'desc'); else { setSortBy('updated_at'); setSortDir('desc') } }}>
+                      <span className="flex items-center gap-1">Modified {sortBy === 'updated_at' ? (sortDir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
+                    </th>
+                  )}
                   {visibleColumns.has('phone') && <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Phone</th>}
                   {visibleColumns.has('last_note') && <th className="px-3 py-3 w-36 text-left text-xs font-semibold uppercase tracking-wide">Notes</th>}
                   {visibleColumns.has('source') && <th className="px-3 py-3 w-20 text-left text-xs font-semibold uppercase tracking-wide">Source</th>}
                   {visibleColumns.has('status') && <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Status</th>}
-                  {visibleColumns.has('created_at') && <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide">Created</th>}
+                  {visibleColumns.has('created_at') && (
+                    <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide cursor-pointer hover:bg-gray-800 select-none"
+                      onClick={() => { if (sortBy === 'created_at') setSortDir(d => d === 'desc' ? 'asc' : 'desc'); else { setSortBy('created_at'); setSortDir('desc') } }}>
+                      <span className="flex items-center gap-1">Created {sortBy === 'created_at' ? (sortDir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3 opacity-40" />}</span>
+                    </th>
+                  )}
                   {visibleColumns.has('latest_scheduled_at') && <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide">Scheduled</th>}
                   {visibleColumns.has('email') && <th className="px-3 py-3 w-32 text-left text-xs font-semibold uppercase tracking-wide">Email</th>}
                   {visibleColumns.has('customer_location') && <th className="px-3 py-3 w-24 text-left text-xs font-semibold uppercase tracking-wide">Location</th>}
@@ -1021,10 +1143,14 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                             </div>
                           </div>
                         </td>
+                        {visibleColumns.has('assigned_rm') && (
+                          <td className="px-3 py-4 w-24">
+                            <p className="text-xs font-medium text-gray-700 truncate max-w-[88px]">{lead.assigned_rm || <span className="text-gray-400 italic">Unassigned</span>}</p>
+                          </td>
+                        )}
                         {visibleColumns.has('modified') && (
-                          <td className="px-3 py-4 w-28">
-                            <p className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{lead.assigned_rm || 'Unassigned'}</p>
-                            <p className="text-xs text-gray-400">At {formatDate(lead.updated_at)}</p>
+                          <td className="px-3 py-4 w-24">
+                            <p className="text-xs text-gray-500">{formatDate(lead.updated_at)}</p>
                           </td>
                         )}
                         {visibleColumns.has('phone') && (
@@ -1160,7 +1286,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
         <>
           <div
             className="fixed inset-0 bg-black/20 z-30"
-            onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null); setShowAddEnquiry(false) }}
+            onClick={() => { setProfileLead(null); setProfileDetail(null); setSelectedLead(null); setShowAddEnquiry(false); setShowAddListing(false); setTimelineSearch('') }}
           />
           <div className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-2xl z-40 flex flex-col border-l border-gray-200 overflow-hidden">
           {/* Panel header */}
@@ -1228,6 +1354,13 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
               </div>
             )}
 
+            {/* Keyboard shortcut hint */}
+            {!profileLoading && !showAddEnquiry && !showAddListing && (
+              <div className="text-[10px] text-gray-300 text-center py-1 select-none">
+                {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}+E Add Enquiry · {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}+L Add Listing · {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'}+N Add Note
+              </div>
+            )}
+
             {!profileLoading && (
               <>
                 {/* Contact Details */}
@@ -1263,12 +1396,16 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                     <p className="text-xs text-gray-400 italic">No enquiries yet</p>
                   )}
                   <div className="space-y-2">
-                    {(profileDetail?.enquiries || []).map((enq: any) => (
+                    {[...(profileDetail?.enquiries || [])].sort((a: any, b: any) =>
+                      (pinnedEnquiries.has(b.enquiry_id) ? 1 : 0) - (pinnedEnquiries.has(a.enquiry_id) ? 1 : 0)
+                    ).map((enq: any) => (
                       <PanelEnquiryCard
                         key={enq.enquiry_id}
                         enq={enq}
                         lead={profileLead}
                         user={user}
+                        pinned={pinnedEnquiries.has(enq.enquiry_id)}
+                        onTogglePin={() => togglePin(enq.enquiry_id, profileLead.lead_id)}
                         onNavigate={() => {
                           setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
                           onNavigateToEnquiry?.(enq.enquiry_id)
@@ -1428,11 +1565,118 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                       />
                     ))}
                   </div>
+
+                  {/* Add Listing button + inline form */}
+                  {!showAddListing ? (
+                    <button
+                      onClick={() => setShowAddListing(true)}
+                      className="w-full text-xs text-orange-600 border border-orange-300 border-dashed rounded-lg py-2 hover:bg-orange-50 mt-2"
+                    >
+                      + Add Listing
+                    </button>
+                  ) : (
+                    <div className="mt-2 border border-orange-200 rounded-xl p-3 space-y-2.5 bg-orange-50/50">
+                      <p className="text-xs font-semibold text-orange-700">New Listing</p>
+
+                      <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">Property Type *</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {['Apartment', 'Villa', 'Plot', 'Commercial', 'Office', 'Other'].map(pt => (
+                            <button key={pt}
+                              onClick={() => setAddListForm(p => ({ ...p, propertyType: p.propertyType === pt ? '' : pt }))}
+                              className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${addListForm.propertyType === pt ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-300 hover:border-orange-400'}`}
+                            >{pt}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">Bedrooms</label>
+                          <input type="number" value={addListForm.bedrooms} onChange={e => setAddListForm(p => ({ ...p, bedrooms: e.target.value }))} placeholder="e.g. 3" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400/40" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">Area sqft</label>
+                          <input type="number" value={addListForm.areaSqft} onChange={e => setAddListForm(p => ({ ...p, areaSqft: e.target.value }))} placeholder="e.g. 1200" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400/40" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">City</label>
+                          <input type="text" value={addListForm.city} onChange={e => setAddListForm(p => ({ ...p, city: e.target.value }))} placeholder="Bangalore" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400/40" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">Locality</label>
+                          <input type="text" value={addListForm.locality} onChange={e => setAddListForm(p => ({ ...p, locality: e.target.value }))} placeholder="Whitefield" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400/40" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-gray-500 block mb-1">Asking Price</label>
+                          <input type="number" value={addListForm.askingPrice} onChange={e => setAddListForm(p => ({ ...p, askingPrice: e.target.value }))} placeholder="e.g. 5000000" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400/40" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">Currency</label>
+                          <select value={addListForm.currency} onChange={e => setAddListForm(p => ({ ...p, currency: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none bg-white">
+                            <option>INR</option><option>AED</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">Floor No.</label>
+                          <input type="number" value={addListForm.floorNumber} onChange={e => setAddListForm(p => ({ ...p, floorNumber: e.target.value }))} placeholder="e.g. 4" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400/40" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-1">Possession</label>
+                          <select value={addListForm.possessionStatus} onChange={e => setAddListForm(p => ({ ...p, possessionStatus: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none bg-white">
+                            <option value="">Select…</option>
+                            <option>Ready to Move</option>
+                            <option>Under Construction</option>
+                            <option>Resale</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-gray-500 block mb-1">Seller Notes</label>
+                        <textarea value={addListForm.sellerNotes} onChange={e => setAddListForm(p => ({ ...p, sellerNotes: e.target.value }))} rows={2} placeholder="Optional notes…" className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none" />
+                      </div>
+
+                      <div className="flex gap-2 pt-0.5">
+                        <button
+                          onClick={handleAddListing}
+                          disabled={addListSaving || !addListForm.propertyType}
+                          className="flex-1 text-xs py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                          {addListSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                          Add Listing
+                        </button>
+                        <button
+                          onClick={() => { setShowAddListing(false); setAddListForm({ title: '', propertyType: '', bedrooms: '', areaSqft: '', city: '', locality: '', askingPrice: '', currency: 'INR', floorNumber: '', possessionStatus: '', sellerNotes: '' }) }}
+                          className="flex-1 text-xs py-1.5 bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 {/* Activity */}
                 <section>
                   <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Activity Timeline</p>
+                  {/* Timeline search (Change 10) */}
+                  <input
+                    type="text"
+                    placeholder="Search activity… (calls, notes, stages)"
+                    value={timelineSearch}
+                    onChange={e => setTimelineSearch(e.target.value)}
+                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-1.5 mb-2 focus:outline-none focus:ring-2 focus:ring-[#422D83]/30"
+                  />
                   <button
                     onClick={() => setLogModal({
                       type: 'note',
@@ -1448,52 +1692,94 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                     <p className="text-xs text-gray-400 italic">No activity yet</p>
                   )}
                   <div>
-                    {(profileDetail?.activity || []).map((item: any, i: number) => {
-                      const iconMap: Record<string, string> = {
-                        stage_change: '🔄', call: '📞', whatsapp: '💬',
-                        note_added: '📝', note: '📝', listing_added: '🏠',
-                        enquiry_added: '✨', lead_created: '👤', lead_assigned: '👥',
-                      }
-                      const icon = iconMap[item.type] || '•'
-                      return (
-                        <div key={item.id || i} className="flex gap-2.5 py-2 border-b border-gray-50 last:border-0">
-                          <span className="text-base flex-shrink-0 w-5 text-center">{icon}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-gray-800">{item.title}</p>
-                            {item.description && (
-                              <p className="text-[11px] text-gray-500 mt-0.5 italic">"{item.description}"</p>
-                            )}
-                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                              {item.enquiry_id && (
-                                <button
-                                  onClick={() => {
-                                    setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
-                                    onNavigateToEnquiry?.(item.enquiry_id)
-                                  }}
-                                  className="text-[10px] px-1.5 py-0.5 bg-[#422D83]/10 text-[#422D83] rounded font-mono hover:bg-[#422D83]/20"
-                                >
-                                  {item.enquiry_id}
-                                </button>
+                    {(profileDetail?.activity || [])
+                      .filter((item: any) => {
+                        if (!timelineSearch.trim()) return true
+                        const q = timelineSearch.toLowerCase()
+                        return (item.title || '').toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
+                      })
+                      .map((item: any, i: number) => {
+                        const iconMap: Record<string, string> = {
+                          stage_change: '🔄', call: '📞', whatsapp: '💬',
+                          note_added: '📝', note: '📝', listing_added: '🏠',
+                          enquiry_added: '✨', lead_created: '👤', lead_assigned: '👥',
+                        }
+                        const icon = iconMap[item.type] || '•'
+                        // Look up enquiry/listing data for tooltip (Change 8)
+                        const enqData = item.enquiry_id ? (profileDetail?.enquiries || []).find((e: any) => e.enquiry_id === item.enquiry_id) : null
+                        const lsData = item.listing_id ? (profileDetail?.listings || []).find((l: any) => l.listing_id === item.listing_id) : null
+                        return (
+                          <div key={item.id || i} className="flex gap-2.5 py-2 border-b border-gray-50 last:border-0">
+                            <span className="text-base flex-shrink-0 w-5 text-center">{icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-gray-800">{item.title}</p>
+                              {item.description && (
+                                <p className="text-[11px] text-gray-500 mt-0.5 italic">"{item.description}"</p>
                               )}
-                              {item.listing_id && (
-                                <button
-                                  onClick={() => {
-                                    setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
-                                    onNavigateToListing?.(item.listing_id)
-                                  }}
-                                  className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded font-mono hover:bg-orange-200"
-                                >
-                                  {item.listing_id}
-                                </button>
-                              )}
-                              <span className="text-[10px] text-gray-400">
-                                {item.performed_by} · {item.created_at ? new Date(item.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
-                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                {item.enquiry_id && (
+                                  <span className="relative group inline-block">
+                                    <button
+                                      onClick={() => {
+                                        setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
+                                        onNavigateToEnquiry?.(item.enquiry_id)
+                                      }}
+                                      className="text-[10px] px-1.5 py-0.5 bg-[#422D83]/10 text-[#422D83] rounded font-mono hover:bg-[#422D83]/20"
+                                    >
+                                      {item.enquiry_id}
+                                    </button>
+                                    {enqData && (
+                                      <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block z-50 pointer-events-none">
+                                        <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-56 text-[10px]">
+                                          <p className="font-semibold text-gray-800 mb-1">{item.enquiry_id}</p>
+                                          <p><span className={`px-1.5 py-0.5 rounded-full font-medium ${stageBadgeCls(enqData.stage)}`}>{stageDisplayLabel(enqData.stage || 'New')}</span></p>
+                                          {enqData.property_type && <p className="text-gray-600 mt-1">{enqData.property_type}{enqData.bedrooms > 0 ? ` · ${enqData.bedrooms}BHK` : ''}</p>}
+                                          {enqData.location_pref && <p className="text-gray-500">📍 {enqData.location_pref}</p>}
+                                          {(enqData.min_budget > 0 || enqData.max_budget > 0) && <p className="text-gray-500">{enqData.currency === 'AED' ? 'AED ' : '₹'}{Number(enqData.min_budget || 0).toLocaleString('en-IN')} – {enqData.currency === 'AED' ? 'AED ' : '₹'}{Number(enqData.max_budget || 0).toLocaleString('en-IN')}</p>}
+                                          {enqData.scheduled_at && <p className="text-gray-500">📅 {new Date(enqData.scheduled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </span>
+                                )}
+                                {item.listing_id && (
+                                  <span className="relative group inline-block">
+                                    <button
+                                      onClick={() => {
+                                        setProfileLead(null); setProfileDetail(null); setSelectedLead(null)
+                                        onNavigateToListing?.(item.listing_id)
+                                      }}
+                                      className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded font-mono hover:bg-orange-200"
+                                    >
+                                      {item.listing_id}
+                                    </button>
+                                    {lsData && (
+                                      <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block z-50 pointer-events-none">
+                                        <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-3 w-56 text-[10px]">
+                                          <p className="font-semibold text-gray-800 mb-1">{item.listing_id}</p>
+                                          <span className={`px-1.5 py-0.5 rounded-full font-medium ${lsData.status === 'live' ? 'bg-green-100 text-green-700' : lsData.status === 'admin_approved' ? 'bg-violet-100 text-violet-700' : lsData.status === 'rm_verified' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>{lsData.status || 'pending'}</span>
+                                          {lsData.title && <p className="text-gray-700 mt-1 font-medium truncate">{lsData.title}</p>}
+                                          {lsData.asking_price > 0 && <p className="text-gray-600">{lsData.currency === 'AED' ? 'AED ' : '₹'}{Number(lsData.asking_price).toLocaleString('en-IN')}</p>}
+                                          {(lsData.city || lsData.locality) && <p className="text-gray-500">📍 {[lsData.locality, lsData.city].filter(Boolean).join(', ')}</p>}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-gray-400">
+                                  {item.performed_by} · {item.created_at ? new Date(item.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    {timelineSearch.trim() && (profileDetail?.activity || []).filter((item: any) => {
+                      const q = timelineSearch.toLowerCase()
+                      return (item.title || '').toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
+                    }).length === 0 && (
+                      <p className="text-xs text-gray-400 italic">No activity matching &ldquo;{timelineSearch}&rdquo;</p>
+                    )}
                   </div>
                 </section>
               </>
@@ -1776,23 +2062,84 @@ function LogActionModal({ type, lead, enquiries, listings, user, onClose, onSucc
 
 // ─── Panel Enquiry Card ────────────────────────────────────────────────────────
 
-function PanelEnquiryCard({ enq, lead, user, onNavigate, onOpenLog, onRefresh, showToast }: {
+function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, onOpenLog, onRefresh, showToast }: {
   enq: any
   lead: any
   user: any
+  pinned: boolean
+  onTogglePin: () => void
   onNavigate: () => void
-  onOpenLog: (type: 'call' | 'whatsapp') => void
+  onOpenLog: (type: 'whatsapp') => void
   onRefresh: () => void
   showToast: (msg: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [stageForm, setStageForm] = useState({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
   const [saving, setSaving] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [callBar, setCallBar] = useState(false)
+  const [callNotes, setCallNotes] = useState('')
+  const [callDuration, setCallDuration] = useState('')
+  const [callSaving, setCallSaving] = useState(false)
+  const callNotesRef = useRef<HTMLTextAreaElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
   const subStages = stageForm.stage ? (SUB_STAGES[stageForm.stage] || []) : []
   const needsSchedule = ['Callback', 'Schedule Meeting', 'Schedule Site Visit'].includes(stageForm.stage)
   const needsLostReason = ['Not Interested', 'Drop'].includes(stageForm.stage)
+
+  // Urgency border (Change 6)
+  const now = new Date()
+  const schedDate = enq.scheduled_at ? new Date(enq.scheduled_at) : null
+  const isToday = schedDate && schedDate.toDateString() === now.toDateString()
+  const isOverdue = schedDate && schedDate < now && !isToday
+  const isFuture = schedDate && schedDate > now && !isToday
+  const urgencyBorder = isOverdue ? 'border-l-4 border-l-red-500' : isToday ? 'border-l-4 border-l-amber-400' : isFuture ? 'border-l-4 border-l-blue-400' : ''
+
+  // Enquiry age (Change 6)
+  const createdDaysAgo = enq.created_at ? Math.floor((now.getTime() - new Date(enq.created_at).getTime()) / 86400000) : null
+  const ageCls = createdDaysAgo === null ? '' : createdDaysAgo <= 3 ? 'text-green-600' : createdDaysAgo <= 7 ? 'text-amber-600' : 'text-red-600'
+
+  // Health dot (Change 6) — based on age of last activity
+  // We approximate from the enquiry updated_at as a proxy
+  const lastActiveDays = enq.updated_at ? Math.floor((now.getTime() - new Date(enq.updated_at).getTime()) / 86400000) : null
+  const healthDot = lastActiveDays === null ? 'bg-gray-300' : lastActiveDays <= 3 ? 'bg-green-500' : lastActiveDays <= 7 ? 'bg-amber-400' : 'bg-red-500'
+
+  useEffect(() => {
+    if (callBar) setTimeout(() => callNotesRef.current?.focus(), 50)
+  }, [callBar])
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!contextMenu) return
+    const fn = () => setContextMenu(null)
+    document.addEventListener('mousedown', fn)
+    return () => document.removeEventListener('mousedown', fn)
+  }, [contextMenu])
+
+  function handleContextMenu(e: React.MouseEvent) {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY })
+  }
+
+  // Long press for mobile (Change 9)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  function onTouchStart(e: React.TouchEvent) {
+    longPressTimer.current = setTimeout(() => {
+      const t = e.touches[0]
+      setContextMenu({ x: t.clientX, y: t.clientY })
+    }, 500)
+  }
+  function onTouchEnd() {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current)
+  }
+
+  function selectStageFromMenu(apiStage: string) {
+    setContextMenu(null)
+    setExpanded(true)
+    setStageForm(p => ({ ...p, stage: apiStage, subStage: '', lostReason: '' }))
+  }
 
   async function handleSaveStage() {
     if (!stageForm.stage || !stageForm.notes.trim()) return
@@ -1823,38 +2170,114 @@ function PanelEnquiryCard({ enq, lead, user, onNavigate, onOpenLog, onRefresh, s
     }
   }
 
+  async function handleLogCall(e?: React.KeyboardEvent) {
+    if (e && !(e.key === 'Enter' && (e.metaKey || e.ctrlKey))) return
+    setCallSaving(true)
+    try {
+      const res = await fetch('/api/crm/v2/activity/log', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: lead.lead_id,
+          enquiryId: enq.enquiry_id,
+          activityType: 'call',
+          notes: callNotes.trim() || undefined,
+          duration: callDuration ? Number(callDuration) : undefined,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setCallBar(false)
+      setCallNotes(''); setCallDuration('')
+      showToast('✓ Call logged')
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error logging call')
+    } finally {
+      setCallSaving(false)
+    }
+  }
+
   return (
-    <div className={`border rounded-xl overflow-hidden ${enq.status === 'active' ? 'border-[#422D83]/20' : 'border-gray-200 opacity-60'}`}>
+    <div
+      ref={cardRef}
+      className={`border rounded-xl overflow-hidden ${urgencyBorder} ${pinned ? 'border-amber-400' : enq.status === 'active' ? 'border-[#422D83]/20' : 'border-gray-200 opacity-60'}`}
+      onContextMenu={handleContextMenu}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
+      {/* Context menu (Change 9) */}
+      {contextMenu && (
+        <div
+          className="fixed z-[90] bg-white border border-gray-200 rounded-xl shadow-xl py-1.5 w-48 text-xs"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <p className="px-3 py-1 text-gray-400 font-semibold uppercase tracking-wide text-[10px]">Move to stage</p>
+          {STAGE_ACTIONS.map(a => (
+            <button key={a.apiStage} onClick={() => selectStageFromMenu(a.apiStage)}
+              className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-700">
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div
-        className={`p-3 cursor-pointer ${enq.status === 'active' ? 'bg-[#422D83]/5' : 'bg-gray-50'}`}
+        className={`p-3 cursor-pointer ${pinned ? 'bg-amber-50' : enq.status === 'active' ? 'bg-[#422D83]/5' : 'bg-gray-50'}`}
         onClick={onNavigate}
       >
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Health dot (Change 6) */}
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${healthDot}`} title="Contact recency" />
             <span className="text-[10px] font-mono text-gray-500">{enq.enquiry_id}</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${stageBadgeCls(enq.stage)}`}>
               {stageDisplayLabel(enq.stage || 'New')}
             </span>
             {enq.sub_stage && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">{enq.sub_stage}</span>}
           </div>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${enq.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-            {enq.status}
-          </span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Pin button (Change 11) */}
+            <button
+              onClick={e => { e.stopPropagation(); onTogglePin() }}
+              className={`p-0.5 rounded transition-colors ${pinned ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}
+              title={pinned ? 'Unpin' : 'Pin'}
+            >
+              <Pin className="w-3 h-3" fill={pinned ? 'currentColor' : 'none'} />
+            </button>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${enq.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              {enq.status}
+            </span>
+          </div>
         </div>
+
+        {/* Property + location (Change 6) */}
         {enq.property_type && (
-          <p className="text-xs text-gray-600">{enq.property_type}{enq.location_pref ? ` · ${enq.location_pref}` : ''}</p>
+          <p className="text-xs text-gray-600">
+            {enq.bedrooms > 0 ? `🛏 ${enq.bedrooms}BHK ` : ''}{enq.property_type}
+            {enq.location_pref ? <span className="text-gray-500"> · 📍{enq.location_pref}</span> : ''}
+          </p>
         )}
+
         {(enq.min_budget > 0 || enq.max_budget > 0) && (
           <p className="text-xs text-gray-500">
             {enq.currency === 'AED' ? 'AED' : '₹'}{Number(enq.min_budget || 0).toLocaleString('en-IN')} – {enq.currency === 'AED' ? 'AED' : '₹'}{Number(enq.max_budget || 0).toLocaleString('en-IN')}
+            {createdDaysAgo !== null && <span className={`ml-2 text-[10px] ${ageCls}`}>· Created {createdDaysAgo === 0 ? 'today' : `${createdDaysAgo}d ago`}</span>}
           </p>
         )}
-        <p className="text-[10px] text-gray-400 mt-0.5">
-          {enq.scheduled_at
-            ? `📅 ${new Date(enq.scheduled_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-            : '📅 Not scheduled'}
-        </p>
+
+        {schedDate && (
+          <p className={`text-[10px] mt-0.5 ${isOverdue ? 'text-red-600 font-medium' : isToday ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+            📅 {schedDate.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            {isOverdue && ' · Overdue'}
+            {isToday && ' · Today'}
+          </p>
+        )}
+        {!schedDate && <p className="text-[10px] text-gray-400 mt-0.5">📅 Not scheduled</p>}
       </div>
+
       <div className="border-t border-gray-100 px-3 py-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
         {enq.status === 'active' && (
           <button
@@ -1864,13 +2287,45 @@ function PanelEnquiryCard({ enq, lead, user, onNavigate, onOpenLog, onRefresh, s
             Change Stage {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           </button>
         )}
-        <button onClick={() => onOpenLog('call')} className="w-6 h-6 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-600 flex items-center justify-center" title="Log Call">
+        {/* Inline call log mini-bar toggle (Change 12) */}
+        <button
+          onClick={() => setCallBar(p => !p)}
+          className={`w-6 h-6 rounded transition-colors flex items-center justify-center ${callBar ? 'bg-emerald-500 text-white' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'}`}
+          title="Log Call"
+        >
           <Phone className="w-3 h-3" />
         </button>
         <button onClick={() => onOpenLog('whatsapp')} className="w-6 h-6 rounded bg-green-50 hover:bg-green-100 text-green-600 flex items-center justify-center" title="Log WhatsApp">
           <MessageCircle className="w-3 h-3" />
         </button>
       </div>
+
+      {/* Inline call log mini-bar (Change 12) */}
+      {callBar && (
+        <div className="border-t border-emerald-100 bg-emerald-50 p-3 space-y-2">
+          <p className="text-xs font-semibold text-emerald-700">📞 Log Call</p>
+          <textarea
+            ref={callNotesRef}
+            value={callNotes}
+            onChange={e => setCallNotes(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Escape') { setCallBar(false) } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { handleLogCall() } }}
+            rows={2}
+            placeholder="Notes… (Esc to cancel, ⌘↵ to save)"
+            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400/40 resize-none"
+          />
+          <div className="flex items-center gap-2">
+            <input type="number" value={callDuration} onChange={e => setCallDuration(e.target.value)} placeholder="Duration (min)" min="0" className="w-28 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none" />
+            <div className="flex gap-1.5 ml-auto">
+              <button onClick={() => { setCallBar(false); setCallNotes(''); setCallDuration('') }} className="text-xs px-2.5 py-1 border border-gray-300 bg-white rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => handleLogCall()} disabled={callSaving} className="text-xs px-2.5 py-1 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-1">
+                {callSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {expanded && (
         <div className="border-t border-[#422D83]/10 bg-white p-3 space-y-3">
           <div className="flex flex-wrap gap-1.5">
@@ -1930,6 +2385,14 @@ function PanelEnquiryCard({ enq, lead, user, onNavigate, onOpenLog, onRefresh, s
 
 // ─── Panel Listing Card ────────────────────────────────────────────────────────
 
+const LISTING_STEPS = [
+  { key: 'pending', label: 'Pending' },
+  { key: 'rm_verified', label: 'RM Verified' },
+  { key: 'admin_approved', label: 'Approved' },
+  { key: 'live', label: 'Live' },
+  { key: 'sold', label: 'Sold' },
+]
+
 function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, showToast }: {
   ls: any
   lead: any
@@ -1943,13 +2406,8 @@ function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, sh
   const [visitNotes, setVisitNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const statusBadge: Record<string, string> = {
-    pending: 'bg-orange-100 text-orange-700',
-    rm_verified: 'bg-blue-100 text-blue-700',
-    admin_approved: 'bg-violet-100 text-violet-700',
-    live: 'bg-green-100 text-green-700',
-    sold: 'bg-gray-100 text-gray-500',
-  }
+  const currentStep = LISTING_STEPS.findIndex(s => s.key === ls.status)
+  const isVerified = ls.status === 'admin_approved' || ls.status === 'live' || ls.status === 'sold'
 
   function nextAction(): { label: string; newStatus: string } | null {
     if (ls.status === 'pending' && (user?.role === 'rm' || user?.role === 'admin' || user?.role === 'super_admin')) return { label: 'Mark RM Verified', newStatus: 'rm_verified' }
@@ -1987,29 +2445,72 @@ function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, sh
   }
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40 resize-none"
+  const priceStr = ls.asking_price > 0
+    ? `${ls.currency === 'AED' ? 'AED ' : '₹'}${Number(ls.asking_price).toLocaleString('en-IN')}`
+    : null
+  const detailParts = [
+    ls.bedrooms ? `${ls.bedrooms} BHK` : null,
+    ls.carpet_area ? `${ls.carpet_area} sqft` : null,
+    ls.floor ? `Fl. ${ls.floor}` : null,
+  ].filter(Boolean)
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
+      {/* Card header — clickable to navigate */}
       <div className="p-3 bg-gray-50 cursor-pointer" onClick={onNavigate}>
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-mono text-gray-500">{ls.listing_id}</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${statusBadge[ls.status] || 'bg-gray-100 text-gray-600'}`}>
-              {ls.status || 'pending'}
+        {/* ID + verified badge row */}
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <span className="text-[10px] font-mono text-gray-400">{ls.listing_id}</span>
+          {isVerified && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-0.5">
+              <Check className="w-2.5 h-2.5" /> Verified
             </span>
-          </div>
+          )}
         </div>
-        <p className="text-xs font-medium text-gray-800 truncate">{ls.title || 'Untitled Listing'}</p>
-        {(ls.property_type || ls.location) && (
-          <p className="text-xs text-gray-500">{[ls.property_type, ls.location].filter(Boolean).join(' · ')}</p>
+
+        {/* 5-step progress bar */}
+        <div className="flex items-center gap-0.5 mb-2">
+          {LISTING_STEPS.map((step, i) => (
+            <div
+              key={step.key}
+              title={step.label}
+              className={`h-1 flex-1 rounded-full transition-colors ${i <= currentStep ? 'bg-[#422D83]' : 'bg-gray-200'}`}
+            />
+          ))}
+        </div>
+        <p className="text-[10px] text-gray-400 mb-1.5">
+          {LISTING_STEPS[currentStep]?.label ?? ls.status}
+        </p>
+
+        {/* Title */}
+        <p className="text-xs font-semibold text-gray-800 truncate mb-0.5">{ls.title || 'Untitled Listing'}</p>
+
+        {/* Property type + location */}
+        {(ls.property_type || ls.location || ls.locality) && (
+          <p className="text-[10px] text-gray-500 mb-1">
+            {[ls.property_type, ls.locality || ls.location].filter(Boolean).join(' · ')}
+          </p>
         )}
-        {ls.asking_price > 0 && (
-          <p className="text-xs text-gray-500">{ls.currency === 'AED' ? 'AED ' : '₹'}{Number(ls.asking_price).toLocaleString('en-IN')}</p>
+
+        {/* Bedrooms / sqft / floor */}
+        {detailParts.length > 0 && (
+          <p className="text-[10px] text-gray-400 mb-1">{detailParts.join(' · ')}</p>
         )}
-        {(ls.carpet_area || ls.floor) && (
-          <p className="text-[10px] text-gray-400">{[ls.carpet_area ? `${ls.carpet_area} sqft` : '', ls.floor ? `Floor ${ls.floor}` : ''].filter(Boolean).join(' · ')}</p>
+
+        {/* Prominent price */}
+        {priceStr && (
+          <p className="text-sm font-bold text-[#422D83] mt-1">{priceStr}</p>
+        )}
+
+        {/* RM visit notes preview */}
+        {ls.rm_visit_notes && (
+          <p className="text-[10px] text-gray-500 italic mt-1.5 line-clamp-2">
+            {ls.rm_visit_notes.slice(0, 80)}{ls.rm_visit_notes.length > 80 ? '…' : ''}
+          </p>
         )}
       </div>
+
+      {/* Action bar */}
       <div className="border-t border-gray-100 px-3 py-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
         {action && (
           <button
@@ -2026,6 +2527,8 @@ function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, sh
           <MessageCircle className="w-3 h-3" />
         </button>
       </div>
+
+      {/* Status update panel */}
       {expanded && action && (
         <div className="border-t border-gray-100 bg-white p-3 space-y-3">
           <p className="text-xs font-semibold text-gray-700">→ {action.label}</p>

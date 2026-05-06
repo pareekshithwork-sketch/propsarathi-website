@@ -116,7 +116,7 @@ export function DashboardView({
   onNavigate: (v: any) => void
   v2Dashboard?: any
 }) {
-  if (loading || !stats) {
+  if (loading && !stats && !v2Dashboard) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
@@ -124,8 +124,8 @@ export function DashboardView({
     )
   }
 
-  const sourceCounts: { source: string; count: number }[] = stats.sourceCounts || []
-  const totalLeads = stats.totalLeads || 0
+  const sourceCounts: { source: string; count: number }[] = stats?.sourceCounts || []
+  const totalLeads = stats?.totalLeads || 0
 
   const socialSources = [
     { name: 'Facebook', key: 'Facebook' },
@@ -250,7 +250,7 @@ export function DashboardView({
       )}
 
       {/* ── TOP STAT CARDS ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {stats && <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'Total Leads', value: stats.totalLeads, sub: `${stats.activeLeads} active`, icon: Users, color: 'bg-blue-500' },
           { label: 'Unassigned', value: stats.unassigned, sub: 'Needs assignment', icon: AlertCircle, color: 'bg-amber-500' },
@@ -266,10 +266,10 @@ export function DashboardView({
             <p className="text-xs text-gray-400 mt-0.5">{card.sub}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Pipeline tiles */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      {stats && <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Pipeline Overview</h2>
         <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
           {pipelineTiles.map(tile => (
@@ -280,10 +280,10 @@ export function DashboardView({
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Source breakdown + RM table */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {stats && <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <h2 className="text-sm font-semibold text-gray-700 mb-3">Leads by Source</h2>
           <div className="space-y-4">
@@ -332,10 +332,10 @@ export function DashboardView({
             )}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* RM Report Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      {stats && <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Team Performance</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -364,7 +364,7 @@ export function DashboardView({
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

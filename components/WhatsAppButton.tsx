@@ -1,6 +1,11 @@
 "use client"
 
+import { usePathname } from 'next/navigation'
+
 export default function WhatsAppButton() {
+  const pathname = usePathname()
+  if (pathname?.startsWith('/crm')) return null
+
   return (
     <a
       href="https://wa.me/917090303535"
