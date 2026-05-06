@@ -446,8 +446,9 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
     (filters.tags.length > 0 ? 1 : 0)
 
   const filteredLeads = useMemo(() => {
-    const active = (v2Leads || []).filter((l: any) => !l.is_deleted)
-    let result = active
+    if (!v2Leads) return []
+    const active = v2Leads.filter((l: any) => !l.is_deleted)
+    let result: any[] = active
 
     if (stageTab !== 'All') {
       result = result.filter((l: any) => {
@@ -581,7 +582,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
   }
 
   function selectLeadById(leadId: string) {
-    const lead = v2Leads.find((l: any) => l.lead_id === leadId)
+    const lead = (v2Leads || []).find((l: any) => l.lead_id === leadId)
     if (lead) selectLead(lead)
   }
 
