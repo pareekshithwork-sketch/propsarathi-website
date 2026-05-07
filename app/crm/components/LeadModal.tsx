@@ -5,6 +5,7 @@ import { X, Loader2 } from 'lucide-react'
 import type { Lead } from '../types'
 import { RM_LIST, SOURCE_OPTIONS } from '../constants'
 import { FormField, Input, Select, Textarea } from './shared'
+import { PhoneInput } from '@/components/PhoneInput'
 
 export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setAddLeadTab, savingLead, onSave, onClose }: any) {
   function upd(field: string, value: string) {
@@ -57,16 +58,13 @@ export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setA
                 </FormField>
                 <div>
                   <label className="text-xs font-medium text-gray-600 block mb-1">Phone<span className="text-red-500 ml-0.5">*</span></label>
-                  <div className="flex gap-1.5">
-                    <select
-                      value={leadForm.countryCode || "+91"}
-                      onChange={e => upd("countryCode", e.target.value)}
-                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white focus:outline-none w-20"
-                    >
-                      {["+91", "+971", "+1", "+44", "+65", "+61"].map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <Input value={leadForm.phone || ""} onChange={e => upd("phone", e.target.value)} placeholder="Phone" className="flex-1" />
-                  </div>
+                  <PhoneInput
+                    value={leadForm.phone || ""}
+                    onChange={v => upd("phone", v)}
+                    countryCode={leadForm.countryCode || "+91"}
+                    onCountryChange={v => upd("countryCode", v)}
+                    placeholder="Phone number"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

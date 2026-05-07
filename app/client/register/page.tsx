@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LogoCompact } from '@/components/Logo'
+import { PhoneInput } from '@/components/PhoneInput'
 
 function RegisterForm() {
   const router = useRouter()
@@ -11,6 +12,7 @@ function RegisterForm() {
   const redirect = searchParams.get('redirect') || '/client'
 
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '' })
+  const [countryCode, setCountryCode] = useState('+91')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -27,7 +29,7 @@ function RegisterForm() {
       const res = await fetch('/api/auth/client/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: form.name, email: form.email, phone: form.phone, password: form.password }),
+        body: JSON.stringify({ name: form.name, email: form.email, phone: `${countryCode}${form.phone.replace(/\D/g, '')}`, password: form.password }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Registration failed'); setLoading(false); return }
@@ -91,12 +93,12 @@ function RegisterForm() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Phone <span className="text-gray-400 font-normal">(optional)</span></label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={form.phone}
-                onChange={e => set('phone', e.target.value)}
-                placeholder="+91 98800 00000"
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 focus:border-[#422D83]"
+                onChange={v => set('phone', v)}
+                countryCode={countryCode}
+                onCountryChange={setCountryCode}
+                placeholder="98800 00000"
               />
             </div>
             <div>

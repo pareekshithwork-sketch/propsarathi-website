@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LogoCompact } from '@/components/Logo'
+import { PhoneInput } from '@/components/PhoneInput'
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -157,6 +158,7 @@ const RESEND_COOLDOWN = 30 // seconds
 function WhatsAppOTP({ redirect }: { redirect: string }) {
   const router = useRouter()
   const [phone, setPhone] = useState('')
+  const [countryCode, setCountryCode] = useState('+91')
   const [otp, setOtp] = useState('')
   const [step, setStep] = useState<'phone' | 'otp'>('phone')
   const [error, setError] = useState('')
@@ -196,7 +198,7 @@ function WhatsAppOTP({ redirect }: { redirect: string }) {
       const res = await fetch('/api/auth/whatsapp/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, countryCode }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Failed to send OTP'); setLoading(false); return }
@@ -218,7 +220,7 @@ function WhatsAppOTP({ redirect }: { redirect: string }) {
       const res = await fetch('/api/auth/whatsapp/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({ phone, countryCode, otp }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Invalid OTP'); setLoading(false); return }
@@ -243,19 +245,13 @@ function WhatsAppOTP({ redirect }: { redirect: string }) {
         <>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">WhatsApp Number</label>
-            <div className="flex gap-2">
-              <div className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-3 py-2.5 bg-gray-50/50 text-sm text-gray-600 font-medium select-none whitespace-nowrap">
-                🇮🇳 +91
-              </div>
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value.replace(/[^\d\s\-+()]/g, ''))}
-                placeholder="98800 00000"
-                className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#25D366]/30 focus:border-[#25D366] transition-colors bg-gray-50/50"
-                onKeyDown={e => e.key === 'Enter' && sendOTP()}
-              />
-            </div>
+            <PhoneInput
+              value={phone}
+              onChange={setPhone}
+              countryCode={countryCode}
+              onCountryChange={setCountryCode}
+              placeholder="98800 00000"
+            />
           </div>
           {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-100">{error}</p>}
           <button
@@ -279,7 +275,7 @@ function WhatsAppOTP({ redirect }: { redirect: string }) {
           <div className="flex items-center justify-between bg-green-50 border border-green-100 rounded-xl px-4 py-2.5">
             <div className="flex items-center gap-2">
               <WhatsAppIcon />
-              <span className="text-sm text-gray-700 font-medium">+91 {phone}</span>
+              <span className="text-sm text-gray-700 font-medium">{countryCode} {phone}</span>
             </div>
             <button
               type="button"
