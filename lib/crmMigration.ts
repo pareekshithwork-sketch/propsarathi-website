@@ -41,3 +41,54 @@ export async function runCRMMigration() {
     console.warn('[CRM Migration]', e)
   }
 }
+
+export async function runCRMUsersMigration() {
+  // crm_users enhancements for Google auth + teams
+  const steps = [
+    sql`ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''`,
+    sql`ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS department TEXT DEFAULT ''`,
+    sql`ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS google_id TEXT DEFAULT ''`,
+    sql`ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ`,
+    sql`ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`,
+    sql`
+      CREATE TABLE IF NOT EXISTS crm_teams (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        gm_user_id INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `,
+    sql`ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS team_id INTEGER`,
+    sql`ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS manager_id INTEGER`,
+  ]
+
+  const results: string[] = []
+  for (const step of steps) {
+    try {
+      await step
+      results.push('ok')
+    } catch (e: any) {
+      results.push(`warn: ${e.message?.slice(0, 60)}`)
+    }
+  }
+
+  // Seed known admin emails (idempotent — only updates if email is blank)
+  try {
+    await sql`
+      UPDATE crm_users SET email = 'pareekshith@propsarathi.com', role = 'super_admin'
+      WHERE (user_id = 'PS-U-001' OR name ILIKE '%pareekshith%')
+        AND (email IS NULL OR email = '')
+    `
+    await sql`
+      UPDATE crm_users SET email = 'kushal@propsarathi.com', role = 'super_admin'
+      WHERE (user_id = 'PS-U-002' OR name ILIKE '%kushal%')
+        AND (email IS NULL OR email = '')
+    `
+    results.push('seed ok')
+  } catch (e: any) {
+    results.push(`seed warn: ${e.message?.slice(0, 60)}`)
+  }
+
+  return results
+}

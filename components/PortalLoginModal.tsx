@@ -145,8 +145,14 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
         body: JSON.stringify({ phone: phone.replace(/\D/g, ''), countryCode, action: "verify", otp: phoneOtp }),
       })
       const d = await res.json()
-      if (d.success) { setStep("email-otp"); setEmailSent(false); setEmailOtp("") }
-      else setError(d.error || "Invalid OTP")
+      if (!d.success) { setError(d.error || "Invalid OTP"); setLoading(false); return }
+      if (d.isReturning) {
+        // Cookie already set — user is logged in
+        onSuccess({ phone, verified: true })
+        return
+      }
+      // New user — collect email next
+      setStep("email-otp"); setEmailSent(false); setEmailOtp("")
     } catch { setError("Network error. Try again.") }
     setLoading(false)
   }
@@ -203,14 +209,14 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
     if (!email || !email.includes("@")) { setError("Enter a valid email"); return }
     setLoading(true); clearError()
     try {
-      const res = await fetch("/api/portal/auth/email-otp", {
+      const res = await fetch("/api/auth/otp/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "send", email }),
       })
       const d = await res.json()
       if (d.success) setStep("email-only-otp")
-      else setError(d.error || d.message || "Failed to send OTP")
+      else setError(d.error || "Failed to send OTP")
     } catch { setError("Network error. Try again.") }
     setLoading(false)
   }
@@ -219,17 +225,32 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
     if (!emailOtp || emailOtp.length < 6) { setError("Enter 6-digit OTP"); return }
     setLoading(true); clearError()
     try {
-      const res = await fetch("/api/portal/auth/email-otp", {
+      const verifyRes = await fetch("/api/auth/otp/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "verify", email, otp: emailOtp }),
       })
-      const d = await res.json()
-      if (d.success) {
-        setViewerData(d.viewer)
-        if (d.needsProfile || !d.viewer?.purpose) setStep("profile")
-        else onSuccess(d.viewer)
-      } else setError(d.error || d.message || "Invalid OTP")
+      const d = await verifyRes.json()
+      if (!d.success) { setError(d.error || "Invalid OTP"); setLoading(false); return }
+
+      if (d.isReturning) {
+        // Cookie already set — returning user
+        onSuccess({ email, verified: true })
+        return
+      }
+
+      // New user — call complete to create account, then show profile step
+      const completeRes = await fetch("/api/auth/otp/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
+      const cd = await completeRes.json()
+      if (cd.success) {
+        setStep("profile")
+      } else {
+        setError(cd.error || "Could not create account")
+      }
     } catch { setError("Network error. Try again.") }
     setLoading(false)
   }
@@ -238,14 +259,13 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
     if (!firstName) { setError("First name is required"); return }
     if (!purpose) { setError("Please select your purpose"); return }
     setLoading(true)
-    if (viewerData?.id) {
-      await fetch("/api/portal/auth/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, purpose }),
-      })
-    }
-    onSuccess({ ...viewerData, firstName, lastName, purpose })
+    // Update name using authenticated session (cookie is already set)
+    await fetch("/api/auth/client/update-profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: [firstName, lastName].filter(Boolean).join(' '), purpose }),
+    })
+    onSuccess({ email, firstName, lastName, purpose, verified: true })
     setLoading(false)
   }
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import nodemailer from 'nodemailer'
 import sql from '@/lib/db'
+import { generateClientToken, CLIENT_COOKIE_NAME } from '@/lib/clientAuth'
 
 // Ensure OTP table exists (idempotent)
 async function ensureTable() {
@@ -161,7 +163,28 @@ export async function POST(req: NextRequest) {
       }
 
       await sql`UPDATE client_otps SET verified = true WHERE id = ${record.id}`
-      return NextResponse.json({ success: true })
+
+      // Check if user already exists → returning user short-circuit
+      const userRows = await sql`
+        SELECT id, name FROM client_users WHERE email = ${normalizedEmail} LIMIT 1
+      `
+      if (userRows.length > 0) {
+        const u = userRows[0]
+        await sql`UPDATE client_users SET last_login = NOW() WHERE id = ${u.id}`
+        await sql`DELETE FROM client_otps WHERE id = ${record.id}`
+        const token = generateClientToken({ clientId: u.id, email: normalizedEmail, name: u.name || normalizedEmail.split('@')[0] })
+        const cookieStore = await cookies()
+        cookieStore.set(CLIENT_COOKIE_NAME, token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 30,
+          path: '/',
+        })
+        return NextResponse.json({ success: true, isReturning: true })
+      }
+
+      return NextResponse.json({ success: true, isReturning: false })
     }
 
     return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })

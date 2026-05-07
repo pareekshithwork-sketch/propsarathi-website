@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import jwt from 'jsonwebtoken'
 import sql from '@/lib/db'
 import { generateClientToken, CLIENT_COOKIE_NAME } from '@/lib/clientAuth'
 
@@ -101,23 +102,17 @@ export async function GET(req: NextRequest) {
         WHERE id = ${u.id}
       `
     } else {
-      // New user — create account (no password; google_id links them)
-      const [newUser] = await sql`
-        INSERT INTO client_users (name, email, phone, password_hash, google_id, profile_image, is_verified, last_login)
-        VALUES (
-          ${name || email.split('@')[0]},
-          ${normalEmail},
-          '',
-          '',
-          ${googleId || ''},
-          ${picture || ''},
-          TRUE,
-          NOW()
-        )
-        RETURNING id, name
-      `
-      userId   = newUser.id
-      userName = newUser.name
+      // New user — issue a short-lived temp JWT and redirect to collect WhatsApp number
+      const jwtSecret = process.env.JWT_SECRET
+      if (!jwtSecret) {
+        return NextResponse.redirect(`${origin}/client/login?error=google_server_error`)
+      }
+      const tempToken = jwt.sign(
+        { googleTemp: true, email: normalEmail, name: name || normalEmail.split('@')[0], googleId: googleId || '', picture: picture || '' },
+        jwtSecret,
+        { expiresIn: '15m' }
+      )
+      return NextResponse.redirect(`${origin}/client/verify-phone?token=${encodeURIComponent(tempToken)}`)
     }
 
     // ── Step 5: Generate JWT and set cookie ───────────────────────────────────

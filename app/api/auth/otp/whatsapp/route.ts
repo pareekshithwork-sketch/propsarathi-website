@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import sql from '@/lib/db'
+import { generateClientToken, CLIENT_COOKIE_NAME } from '@/lib/clientAuth'
 
 // ── OTP table (idempotent, same DDL as email route) ────────────────────────────
 async function ensureTable() {
@@ -142,7 +144,28 @@ export async function POST(req: NextRequest) {
       }
 
       await sql`UPDATE client_otps SET verified = true WHERE id = ${record.id}`
-      return NextResponse.json({ success: true })
+
+      // Check if user already exists → returning user short-circuit
+      const userRows = await sql`
+        SELECT id, name, email FROM client_users WHERE phone = ${fullPhone} LIMIT 1
+      `
+      if (userRows.length > 0) {
+        const u = userRows[0]
+        await sql`UPDATE client_users SET last_login = NOW() WHERE id = ${u.id}`
+        await sql`DELETE FROM client_otps WHERE id = ${record.id}`
+        const token = generateClientToken({ clientId: u.id, email: u.email || '', name: u.name || fullPhone })
+        const cookieStore = await cookies()
+        cookieStore.set(CLIENT_COOKIE_NAME, token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 30,
+          path: '/',
+        })
+        return NextResponse.json({ success: true, isReturning: true })
+      }
+
+      return NextResponse.json({ success: true, isReturning: false })
     }
 
     return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })

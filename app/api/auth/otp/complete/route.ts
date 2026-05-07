@@ -7,31 +7,11 @@ export async function POST(req: NextRequest) {
   try {
     const { phone, countryCode, email } = await req.json()
 
-    if (!phone || !countryCode || !email) {
-      return NextResponse.json({ success: false, error: 'phone, countryCode and email are required' }, { status: 400 })
+    if (!email) {
+      return NextResponse.json({ success: false, error: 'email is required' }, { status: 400 })
     }
 
     const normalizedEmail = email.toLowerCase().trim()
-    const dialCode = countryCode.replace(/[^\d+]/g, '').startsWith('+')
-      ? countryCode.replace(/[^\d+]/g, '')
-      : `+${countryCode.replace(/\D/g, '')}`
-    const fullPhone = `${dialCode}${phone.replace(/\D/g, '')}`
-
-    // Verify WhatsApp OTP was verified recently
-    const waRows = await sql`
-      SELECT id FROM client_otps
-      WHERE identifier = ${fullPhone}
-        AND type = 'whatsapp'
-        AND verified = true
-        AND expires_at > NOW()
-      ORDER BY created_at DESC LIMIT 1
-    `
-    if (waRows.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Phone not verified. Please complete WhatsApp OTP step.' },
-        { status: 400 }
-      )
-    }
 
     // Verify Email OTP was verified recently
     const emailRows = await sql`
@@ -49,6 +29,33 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // If phone provided, verify WhatsApp OTP too
+    let fullPhone: string | null = null
+    let waOtpId: number | null = null
+
+    if (phone && countryCode) {
+      const dialCode = countryCode.replace(/[^\d+]/g, '').startsWith('+')
+        ? countryCode.replace(/[^\d+]/g, '')
+        : `+${countryCode.replace(/\D/g, '')}`
+      fullPhone = `${dialCode}${phone.replace(/\D/g, '')}`
+
+      const waRows = await sql`
+        SELECT id FROM client_otps
+        WHERE identifier = ${fullPhone}
+          AND type = 'whatsapp'
+          AND verified = true
+          AND expires_at > NOW()
+        ORDER BY created_at DESC LIMIT 1
+      `
+      if (waRows.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Phone not verified. Please complete WhatsApp OTP step.' },
+          { status: 400 }
+        )
+      }
+      waOtpId = waRows[0].id
+    }
+
     // Find or create client_users record
     let clientId: number
     let clientName: string
@@ -59,9 +66,8 @@ export async function POST(req: NextRequest) {
     if (existingByEmail.length > 0) {
       clientId = existingByEmail[0].id
       clientName = existingByEmail[0].name || normalizedEmail.split('@')[0]
-      // Update phone if changed
-      await sql`UPDATE client_users SET phone = ${fullPhone}, last_login = NOW() WHERE id = ${clientId}`
-    } else {
+      await sql`UPDATE client_users SET phone = ${fullPhone || ''}, last_login = NOW() WHERE id = ${clientId}`
+    } else if (fullPhone) {
       const existingByPhone = await sql`
         SELECT id, name FROM client_users WHERE phone = ${fullPhone}
       `
@@ -70,7 +76,6 @@ export async function POST(req: NextRequest) {
         clientName = existingByPhone[0].name || fullPhone
         await sql`UPDATE client_users SET email = ${normalizedEmail}, last_login = NOW() WHERE id = ${clientId}`
       } else {
-        // Create new user — no password needed (OTP-verified)
         const newUser = await sql`
           INSERT INTO client_users (name, email, phone, last_login)
           VALUES (${normalizedEmail.split('@')[0]}, ${normalizedEmail}, ${fullPhone}, NOW())
@@ -79,11 +84,20 @@ export async function POST(req: NextRequest) {
         clientId = newUser[0].id
         clientName = newUser[0].name
       }
+    } else {
+      // Email only — create user without phone
+      const newUser = await sql`
+        INSERT INTO client_users (name, email, phone, last_login)
+        VALUES (${normalizedEmail.split('@')[0]}, ${normalizedEmail}, '', NOW())
+        RETURNING id, name
+      `
+      clientId = newUser[0].id
+      clientName = newUser[0].name
     }
 
-    // Consume the verified OTPs so they can't be replayed
-    await sql`DELETE FROM client_otps WHERE id = ${waRows[0].id}`
+    // Consume verified OTPs
     await sql`DELETE FROM client_otps WHERE id = ${emailRows[0].id}`
+    if (waOtpId) await sql`DELETE FROM client_otps WHERE id = ${waOtpId}`
 
     // Issue JWT cookie
     const token = generateClientToken({ clientId, email: normalizedEmail, name: clientName })
@@ -92,7 +106,7 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      maxAge: 60 * 60 * 24 * 30,
       path: '/',
     })
 

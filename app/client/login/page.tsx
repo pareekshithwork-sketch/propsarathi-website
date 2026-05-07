@@ -57,97 +57,193 @@ function GoogleButton({ redirect }: { redirect: string }) {
   )
 }
 
-// ─── Email + password form ────────────────────────────────────────────────────
+// ─── Email OTP flow ───────────────────────────────────────────────────────────
 
-function EmailForm({ redirect }: { redirect: string }) {
+const EmailIcon = () => (
+  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+  </svg>
+)
+
+function EmailOTP({ redirect }: { redirect: string }) {
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [step, setStep] = useState<'email' | 'otp'>('email')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const otpRef = useRef<HTMLInputElement>(null)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
+
+  function startCooldown() {
+    setCooldown(RESEND_COOLDOWN)
+    timerRef.current = setInterval(() => {
+      setCooldown(c => {
+        if (c <= 1) { clearInterval(timerRef.current!); return 0 }
+        return c - 1
+      })
+    }, 1000)
+  }
+
+  async function sendOTP() {
     setError('')
+    if (!email.includes('@')) { setError('Please enter a valid email address'); return }
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/client/login', {
+      const res = await fetch('/api/auth/otp/email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, action: 'send' }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Login failed'); setLoading(false); return }
-      router.push(redirect)
+      if (!res.ok) { setError(data.error || 'Failed to send OTP'); setLoading(false); return }
+      setStep('otp')
+      setInfo('OTP sent! Check your inbox.')
+      startCooldown()
+      setTimeout(() => otpRef.current?.focus(), 100)
+    } catch {
+      setError('Something went wrong. Please try again.')
+    }
+    setLoading(false)
+  }
+
+  async function verifyOTP() {
+    setError('')
+    if (otp.length !== 6) { setError('Please enter the 6-digit OTP'); return }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/auth/otp/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action: 'verify', otp }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Invalid OTP'); setLoading(false); return }
+
+      if (data.isReturning) {
+        // Existing user — cookie already set
+        router.push(redirect)
+        return
+      }
+
+      // New user — call complete to create account
+      const completeRes = await fetch('/api/auth/otp/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const completeData = await completeRes.json()
+      if (completeData.success) {
+        router.push(redirect)
+      } else {
+        setError(completeData.error || 'Could not create account')
+      }
     } catch {
       setError('Something went wrong. Please try again.')
       setLoading(false)
     }
+    setLoading(false)
   }
 
+  async function resendOTP() {
+    if (cooldown > 0) return
+    setOtp(''); setError(''); setInfo('')
+    await sendOTP()
+  }
+
+  const inputCls = 'w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/20 focus:border-[#422D83] transition-colors bg-gray-50/50'
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          required
-          placeholder="you@example.com"
-          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/20 focus:border-[#422D83] transition-colors bg-gray-50/50"
-        />
-      </div>
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Password</label>
-        <div className="relative">
-          <input
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-            placeholder="••••••••"
-            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/20 focus:border-[#422D83] transition-colors bg-gray-50/50 pr-10"
-          />
+    <div className="space-y-3">
+      {step === 'email' ? (
+        <>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className={inputCls}
+              onKeyDown={e => e.key === 'Enter' && sendOTP()}
+            />
+          </div>
+          {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-100">{error}</p>}
           <button
             type="button"
-            onClick={() => setShowPassword(v => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            tabIndex={-1}
+            onClick={sendOTP}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2.5 bg-[#422D83] hover:bg-[#2d1a60] text-white font-semibold py-2.5 rounded-xl transition-all disabled:opacity-60 shadow-sm hover:shadow-md"
           >
-            {showPassword ? (
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+            {loading ? (
+              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
               </svg>
-            ) : (
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            )}
+            ) : <EmailIcon />}
+            {loading ? 'Sending OTP…' : 'Send OTP to Email'}
           </button>
-        </div>
-      </div>
-      {error && (
-        <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-100">{error}</p>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
+            <span className="text-sm text-gray-700 font-medium">{email}</span>
+            <button
+              type="button"
+              onClick={() => { setStep('email'); setOtp(''); setError(''); setInfo('') }}
+              className="text-xs text-[#422D83] hover:underline font-medium"
+            >
+              Change
+            </button>
+          </div>
+          {info && <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2 border border-green-100">{info}</p>}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Enter 6-digit OTP</label>
+            <input
+              ref={otpRef}
+              type="text"
+              inputMode="numeric"
+              value={otp}
+              onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="• • • • • •"
+              maxLength={6}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-center text-xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 focus:border-[#422D83] transition-colors bg-gray-50/50 placeholder:tracking-widest placeholder:text-gray-300"
+              onKeyDown={e => e.key === 'Enter' && verifyOTP()}
+            />
+          </div>
+          {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-100">{error}</p>}
+          <button
+            type="button"
+            onClick={verifyOTP}
+            disabled={loading || otp.length !== 6}
+            className="w-full bg-[#422D83] hover:bg-[#2d1a60] text-white font-semibold py-2.5 rounded-xl transition-all disabled:opacity-60 shadow-sm hover:shadow-md"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+                Verifying…
+              </span>
+            ) : 'Verify OTP & Sign In'}
+          </button>
+          <div className="text-center">
+            {cooldown > 0 ? (
+              <p className="text-xs text-gray-400">Resend OTP in <span className="font-semibold text-gray-600">{cooldown}s</span></p>
+            ) : (
+              <button type="button" onClick={resendOTP} className="text-xs text-[#422D83] hover:underline font-medium">
+                Didn&apos;t receive it? Resend OTP
+              </button>
+            )}
+          </div>
+        </>
       )}
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-[#422D83] hover:bg-[#2d1a60] text-white font-semibold py-2.5 rounded-xl transition-all disabled:opacity-60 shadow-sm hover:shadow-md"
-      >
-        {loading ? (
-          <span className="flex items-center justify-center gap-2">
-            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            Signing in…
-          </span>
-        ) : 'Sign In with Email'}
-      </button>
-    </form>
+    </div>
   )
 }
 
@@ -195,10 +291,10 @@ function WhatsAppOTP({ redirect }: { redirect: string }) {
     }
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/whatsapp/send-otp', {
+      const res = await fetch('/api/auth/otp/whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, countryCode }),
+        body: JSON.stringify({ phone, countryCode, action: 'send' }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Failed to send OTP'); setLoading(false); return }
@@ -217,14 +313,19 @@ function WhatsAppOTP({ redirect }: { redirect: string }) {
     if (otp.length !== 6) { setError('Please enter the 6-digit OTP'); return }
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/whatsapp/verify-otp', {
+      const res = await fetch('/api/auth/otp/whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, countryCode, otp }),
+        body: JSON.stringify({ phone, countryCode, action: 'verify', otp }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Invalid OTP'); setLoading(false); return }
-      router.push(redirect)
+      if (data.isReturning) {
+        router.push(redirect)
+        return
+      }
+      // New user — redirect to verify-phone flow to complete registration with email
+      router.push(`/client/register?phone=${encodeURIComponent(phone)}&cc=${encodeURIComponent(countryCode)}&redirect=${encodeURIComponent(redirect)}`)
     } catch {
       setError('Something went wrong. Please try again.')
       setLoading(false)
@@ -371,10 +472,10 @@ function LoginForm() {
           <GoogleButton redirect={redirect} />
 
           {/* ── Divider ── */}
-          <Divider text="or sign in with email" />
+          <Divider text="or sign in with email OTP" />
 
-          {/* ── 2. Email + password ── */}
-          <EmailForm redirect={redirect} />
+          {/* ── 2. Email OTP ── */}
+          <EmailOTP redirect={redirect} />
 
           {/* ── Divider ── */}
           <Divider text="or continue with WhatsApp" />
