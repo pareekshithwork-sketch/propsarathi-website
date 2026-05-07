@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   // Derive the base URL from the incoming request so it works locally and in prod
   const origin = req.nextUrl.origin
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${origin}/api/auth/google/callback`
+  const redirectUri = `https://www.propsarathi.com/api/auth/google/callback`
 
   // Pass through any ?redirect= param as OAuth state
   const redirectAfter = req.nextUrl.searchParams.get('redirect') || '/client'
