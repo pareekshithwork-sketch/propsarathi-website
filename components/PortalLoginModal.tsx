@@ -101,7 +101,7 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
 
   async function handleGoogleLogin() {
     setLoading(true)
-    window.location.href = "/api/auth/signin/google?callbackUrl=" + encodeURIComponent(window.location.href + "?portal_login=google")
+    window.location.href = "/api/auth/google?redirect=/client"
   }
 
   async function saveProfile() {
