@@ -103,6 +103,26 @@ export async function GET(request: NextRequest) {
         ORDER BY a.created_at DESC
         LIMIT 10
       `,
+
+      // Partner activity feed
+      sql`
+        SELECT pal.id, pal.activity_type, pal.title, pal.description,
+               pal.enquiry_id, pal.lead_id, pal.created_at,
+               p.name AS partner_name, p.tier AS partner_tier
+        FROM crm_partner_activity_log pal
+        JOIN crm_partners p ON p.partner_id = pal.partner_id
+        WHERE pal.activity_type IN ('enquiry_referred', 'listing_referred', 'note_added')
+          ${scope === 'my'
+            ? sql`AND p.assigned_rm_name = ${user.name}`
+            : scope === 'org'
+              ? sql``
+              : user.teamId
+                ? sql`AND p.assigned_rm_id IN (SELECT id FROM crm_users WHERE team_id = ${user.teamId} AND is_active = TRUE)`
+                : sql`AND p.assigned_rm_name = ${user.name}`
+          }
+        ORDER BY pal.created_at DESC
+        LIMIT 5
+      `,
     ])
 
     const overdueEnquiries = results[0].status === 'fulfilled' ? results[0].value : []
@@ -110,6 +130,7 @@ export async function GET(request: NextRequest) {
     const siteVisitsToday = results[2].status === 'fulfilled' ? results[2].value : []
     const statsRows = results[3].status === 'fulfilled' ? results[3].value : []
     const recentActivity = results[4].status === 'fulfilled' ? results[4].value : []
+    const partnerActivity = results[5].status === 'fulfilled' ? results[5].value : []
 
     const s = statsRows[0] || {}
     return NextResponse.json({
@@ -124,6 +145,7 @@ export async function GET(request: NextRequest) {
         siteVisitsThisMonth: Number(s.site_visits_this_month ?? 0),
       },
       recentActivity,
+      partnerActivity,
     })
   } catch (e: any) {
     return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })

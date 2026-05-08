@@ -297,6 +297,42 @@ export function DashboardView({
             </div>
           )}
 
+          {/* Partner Activity Feed */}
+          {(dash.partnerActivity || []).length > 0 && (
+            <div className="bg-white rounded-xl border border-violet-200 p-3">
+              <p className="text-xs font-semibold text-violet-700 mb-2 flex items-center gap-1.5">
+                🤝 Partner Activity
+              </p>
+              <div className="space-y-1.5">
+                {dash.partnerActivity.map((a: any, i: number) => {
+                  const actionLabel =
+                    a.activity_type === 'enquiry_referred' ? 'referred a new enquiry' :
+                    a.activity_type === 'listing_referred' ? 'referred a new listing' :
+                    a.activity_type === 'note_added' ? 'added a note' :
+                    a.activity_type
+                  return (
+                    <div key={a.id || i} className="flex items-start gap-2 py-1 border-b border-gray-50 last:border-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-medium text-gray-800 truncate">{a.partner_name}</span>
+                          {a.partner_tier && (
+                            <span className="text-[10px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded">{a.partner_tier}</span>
+                          )}
+                          <span className="text-[10px] text-gray-400">{actionLabel}</span>
+                        </div>
+                        {a.lead_id && <p className="text-[10px] text-gray-400 mt-0.5">{a.lead_id}</p>}
+                      </div>
+                      <p className="text-[10px] text-gray-300 flex-shrink-0">
+                        {a.created_at ? new Date(a.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Partner Re-engagement */}
           {reEngagementPartners.length > 0 && (
             <div className="bg-white rounded-xl border border-orange-200 p-3">

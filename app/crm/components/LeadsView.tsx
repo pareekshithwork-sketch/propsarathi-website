@@ -253,6 +253,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
   const [profileLead, setProfileLead] = useState<any>(null)
   const [profileDetail, setProfileDetail] = useState<any>(null)
   const [profileLoading, setProfileLoading] = useState(false)
+  const [partnerDropdown, setPartnerDropdown] = useState<{ myPartners: any[]; otherPartners: any[] } | null>(null)
 
   // ── Add Lead modal ──
   const [showAddLead, setShowAddLead] = useState(false)
@@ -573,6 +574,10 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
       .then(data => { if (data.success) setProfileDetail(data) })
       .catch(() => {})
       .finally(() => setProfileLoading(false))
+    fetch('/api/crm/v2/partners/dropdown', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => { if (data.success) setPartnerDropdown(data) })
+      .catch(() => {})
   }
 
   async function loadEnquiryView() {
@@ -1454,6 +1459,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                         })}
                         onRefresh={reloadProfile}
                         showToast={showToast}
+                        partnerDropdown={partnerDropdown}
                       />
                     ))}
                   </div>
@@ -1598,6 +1604,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                         })}
                         onRefresh={reloadProfile}
                         showToast={showToast}
+                        partnerDropdown={partnerDropdown}
                       />
                     ))}
                   </div>
@@ -1728,7 +1735,29 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                     <p className="text-xs text-gray-400 italic">No activity yet</p>
                   )}
                   <div>
-                    {(profileDetail?.activity || [])
+                    {(() => {
+                      // Synthesise partner-tagged enquiry entries and merge into timeline
+                      const partnerEntries = (profileDetail?.enquiries || [])
+                        .filter((e: any) => e.partner_id)
+                        .map((e: any) => ({
+                          id: `partner-${e.enquiry_id}`,
+                          activity_type: 'partner_tagged',
+                          type: 'partner_tagged',
+                          title: `Referred by ${e.partner_name}`,
+                          description: e.partner_link_note || '',
+                          enquiry_id: e.enquiry_id,
+                          performed_by: '',
+                          created_at: e.updated_at,
+                          _isDuplicate: (e.partner_link_note || '').includes('Duplicate —'),
+                        }))
+                      const allActivity = [
+                        ...(profileDetail?.activity || []),
+                        ...partnerEntries,
+                      ].sort((a: any, b: any) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                      )
+                      return allActivity
+                    })()
                       .filter((item: any) => {
                         if (!timelineSearch.trim()) return true
                         const q = timelineSearch.toLowerCase()
@@ -1739,8 +1768,9 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                           stage_change: '🔄', call: '📞', whatsapp: '💬',
                           note_added: '📝', note: '📝', listing_added: '🏠',
                           enquiry_added: '✨', lead_created: '👤', lead_assigned: '👥',
+                          partner_tagged: '🤝', partner_removed: '🤝', partner_note: '📝',
                         }
-                        const icon = iconMap[item.type] || '•'
+                        const icon = iconMap[item.activity_type || item.type] || '•'
                         // Look up enquiry/listing data for tooltip (Change 8)
                         const enqData = item.enquiry_id ? (profileDetail?.enquiries || []).find((e: any) => e.enquiry_id === item.enquiry_id) : null
                         const lsData = item.listing_id ? (profileDetail?.listings || []).find((l: any) => l.listing_id === item.listing_id) : null
@@ -1802,18 +1832,23 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
                                     )}
                                   </span>
                                 )}
+                                {item._isDuplicate && (
+                                  <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">Duplicate review</span>
+                                )}
                                 <span className="text-[10px] text-gray-400">
-                                  {item.performed_by} · {item.created_at ? new Date(item.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                                  {item.performed_by ? `${item.performed_by} · ` : ''}{item.created_at ? new Date(item.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                                 </span>
                               </div>
                             </div>
                           </div>
                         )
                       })}
-                    {timelineSearch.trim() && (profileDetail?.activity || []).filter((item: any) => {
+                    {timelineSearch.trim() && (() => {
+                      const partnerE = (profileDetail?.enquiries || []).filter((e: any) => e.partner_id)
+                      const all = [...(profileDetail?.activity || []), ...partnerE.map((e: any) => ({ title: `Referred by ${e.partner_name}`, description: e.partner_link_note || '' }))]
                       const q = timelineSearch.toLowerCase()
-                      return (item.title || '').toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
-                    }).length === 0 && (
+                      return all.filter((item: any) => (item.title || '').toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)).length === 0
+                    })() && (
                       <p className="text-xs text-gray-400 italic">No activity matching &ldquo;{timelineSearch}&rdquo;</p>
                     )}
                   </div>
@@ -2098,7 +2133,7 @@ function LogActionModal({ type, lead, enquiries, listings, user, onClose, onSucc
 
 // ─── Panel Enquiry Card ────────────────────────────────────────────────────────
 
-function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, onOpenLog, onRefresh, showToast }: {
+function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, onOpenLog, onRefresh, showToast, partnerDropdown }: {
   enq: any
   lead: any
   user: any
@@ -2108,6 +2143,7 @@ function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, on
   onOpenLog: (type: 'whatsapp') => void
   onRefresh: () => void
   showToast: (msg: string) => void
+  partnerDropdown?: { myPartners: any[]; otherPartners: any[] } | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const [stageForm, setStageForm] = useState({ stage: '', subStage: '', notes: '', scheduledAt: '', lostReason: '' })
@@ -2119,6 +2155,16 @@ function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, on
   const [callSaving, setCallSaving] = useState(false)
   const callNotesRef = useRef<HTMLTextAreaElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
+
+  // Partner tag state
+  const [partnerTagOpen, setPartnerTagOpen] = useState(false)
+  const [partnerTagSearch, setPartnerTagSearch] = useState('')
+  const [partnerTagSaving, setPartnerTagSaving] = useState(false)
+  const [pendingPartner, setPendingPartner] = useState<any>(null)
+  const [dupCheck, setDupCheck] = useState<any>(null)
+  const [partnerNote, setPartnerNote] = useState(enq.partner_link_note || '')
+  const [partnerNoteEditing, setPartnerNoteEditing] = useState(false)
+  const [partnerNoteSaving, setPartnerNoteSaving] = useState(false)
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
   const subStages = stageForm.stage ? (SUB_STAGES[stageForm.stage] || []) : []
@@ -2203,6 +2249,79 @@ function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, on
       showToast(e.message || 'Error saving stage')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleTagPartner(partner: any, force = false) {
+    if (!force && !dupCheck) {
+      setPendingPartner(partner)
+      try {
+        const phone = lead.phone || lead.lead_phone || ''
+        const res = await fetch(
+          `/api/crm/v2/enquiries/${enq.enquiry_id}/partner-duplicate-check?phone=${encodeURIComponent(phone)}`,
+          { credentials: 'include' }
+        )
+        const data = await res.json()
+        if (data.isDuplicate) { setDupCheck(data); return }
+      } catch {}
+    }
+    setPartnerTagSaving(true)
+    try {
+      const note = force && dupCheck
+        ? `Duplicate — first referred by ${dupCheck.existingPartnerName} on ${new Date(dupCheck.firstReferralDate).toLocaleDateString('en-IN')}. Assigned by RM on ${new Date().toLocaleDateString('en-IN')}.`
+        : undefined
+      const body: any = { partnerId: partner.partner_id, partnerName: partner.name }
+      if (note) body.note = note
+      const res = await fetch(`/api/crm/v2/enquiries/${enq.enquiry_id}/partner`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setPartnerTagOpen(false); setDupCheck(null); setPendingPartner(null)
+      showToast(`Partner ${partner.name} tagged`)
+      onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error tagging partner')
+    } finally {
+      setPartnerTagSaving(false)
+    }
+  }
+
+  async function handleRemovePartner() {
+    setPartnerTagSaving(true)
+    try {
+      const res = await fetch(`/api/crm/v2/enquiries/${enq.enquiry_id}/partner`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerId: '', partnerName: '' }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      showToast('Partner removed'); onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error removing partner')
+    } finally {
+      setPartnerTagSaving(false)
+    }
+  }
+
+  async function handleSavePartnerNote() {
+    setPartnerNoteSaving(true)
+    try {
+      const res = await fetch(`/api/crm/v2/enquiries/${enq.enquiry_id}/partner`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: partnerNote }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setPartnerNoteEditing(false); showToast('Note saved'); onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error saving note')
+    } finally {
+      setPartnerNoteSaving(false)
     }
   }
 
@@ -2313,6 +2432,165 @@ function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, on
         )}
         {!schedDate && <p className="text-[10px] text-gray-400 mt-0.5">📅 Not scheduled</p>}
       </div>
+
+      {/* Partner tag section */}
+      {partnerDropdown !== undefined && (
+        <div className="border-t border-gray-100 px-3 py-2 space-y-1.5" onClick={e => e.stopPropagation()}>
+          {enq.partner_id ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-gray-400">🤝 Partner:</span>
+              <span className="text-[10px] font-medium text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">{enq.partner_name}</span>
+              <button
+                onClick={handleRemovePartner}
+                disabled={partnerTagSaving}
+                className="ml-auto text-[10px] text-gray-400 hover:text-red-500 disabled:opacity-40"
+              >
+                {partnerTagSaving ? '…' : 'Remove'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setPartnerTagOpen(p => !p); setPartnerTagSearch(''); setDupCheck(null); setPendingPartner(null) }}
+              className="text-[10px] text-violet-600 hover:text-violet-800 flex items-center gap-1"
+            >
+              <span>🤝</span> Tag Partner
+            </button>
+          )}
+
+          {/* Partner dropdown */}
+          {partnerTagOpen && !enq.partner_id && (
+            <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden text-xs">
+              <input
+                type="text"
+                autoFocus
+                value={partnerTagSearch}
+                onChange={e => setPartnerTagSearch(e.target.value)}
+                placeholder="Search partners…"
+                className="w-full px-3 py-1.5 text-xs border-b border-gray-100 focus:outline-none"
+              />
+
+              {/* Duplicate warning */}
+              {dupCheck?.isDuplicate && (
+                <div className="px-3 py-2 bg-amber-50 border-b border-amber-200">
+                  <p className="font-semibold text-amber-700 flex items-center gap-1 text-[11px]">⚠️ Duplicate referral detected</p>
+                  <p className="text-[11px] text-amber-600 mt-0.5">
+                    {dupCheck.existingLeadName} was first referred by {dupCheck.existingPartnerName}
+                    {dupCheck.firstReferralDate ? ` on ${new Date(dupCheck.firstReferralDate).toLocaleDateString('en-IN')}` : ''}.
+                  </p>
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => pendingPartner && handleTagPartner(pendingPartner, true)}
+                      disabled={partnerTagSaving}
+                      className="text-[10px] px-2 py-1 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {partnerTagSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      Assign anyway
+                    </button>
+                    <button
+                      onClick={() => { setDupCheck(null); setPendingPartner(null) }}
+                      className="text-[10px] px-2 py-1 border border-gray-300 bg-white rounded-lg text-gray-600"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* My Partners */}
+              {(() => {
+                const filtered = (partnerDropdown?.myPartners || []).filter(p =>
+                  !partnerTagSearch || p.name.toLowerCase().includes(partnerTagSearch.toLowerCase())
+                )
+                if (!filtered.length) return null
+                return (
+                  <>
+                    <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50">My Partners</p>
+                    {filtered.map((p: any) => (
+                      <button
+                        key={p.partner_id}
+                        onClick={() => handleTagPartner(p)}
+                        disabled={partnerTagSaving}
+                        className="w-full text-left px-3 py-1.5 hover:bg-violet-50 flex items-center justify-between disabled:opacity-50"
+                      >
+                        <span className="font-medium text-gray-800 text-xs">{p.name}</span>
+                        <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{p.tier}</span>
+                      </button>
+                    ))}
+                  </>
+                )
+              })()}
+
+              {/* Other Partners (display only) */}
+              {(() => {
+                const filtered = (partnerDropdown?.otherPartners || []).filter(p =>
+                  !partnerTagSearch || p.name.toLowerCase().includes(partnerTagSearch.toLowerCase())
+                )
+                if (!filtered.length) return null
+                return (
+                  <>
+                    <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50">Other Partners</p>
+                    {filtered.map((p: any) => (
+                      <div key={p.partner_id} className="px-3 py-1.5 flex items-center justify-between opacity-50 cursor-not-allowed">
+                        <span className="text-xs text-gray-500">{p.name}</span>
+                        <span className="text-[10px] text-gray-400">→ {p.assigned_rm_name}</span>
+                      </div>
+                    ))}
+                  </>
+                )
+              })()}
+
+              {(partnerDropdown?.myPartners || []).length === 0 && (partnerDropdown?.otherPartners || []).length === 0 && (
+                <p className="px-3 py-3 text-[11px] text-gray-400 text-center">No active partners found</p>
+              )}
+            </div>
+          )}
+
+          {/* Partner note (only when tagged) */}
+          {enq.partner_id && (
+            <div>
+              {enq.partner_link_note && !partnerNoteEditing ? (
+                <div className="flex items-start gap-2">
+                  <p className="text-[10px] text-gray-500 flex-1 italic">"{enq.partner_link_note}"</p>
+                  <button
+                    onClick={() => { setPartnerNote(enq.partner_link_note); setPartnerNoteEditing(true) }}
+                    className="text-[10px] text-gray-400 hover:text-gray-600 flex-shrink-0"
+                  >
+                    Edit
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <textarea
+                    value={partnerNote}
+                    onChange={e => setPartnerNote(e.target.value)}
+                    rows={2}
+                    placeholder="Add note about this partner referral…"
+                    className="w-full text-[10px] border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-400/30 resize-none"
+                  />
+                  <div className="flex gap-1">
+                    <button
+                      onClick={handleSavePartnerNote}
+                      disabled={partnerNoteSaving}
+                      className="text-[10px] px-2 py-0.5 bg-violet-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {partnerNoteSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      Save Note
+                    </button>
+                    {partnerNoteEditing && (
+                      <button
+                        onClick={() => setPartnerNoteEditing(false)}
+                        className="text-[10px] px-2 py-0.5 border border-gray-300 bg-white rounded-lg text-gray-600"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="border-t border-gray-100 px-3 py-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
         {enq.status === 'active' && (
@@ -2429,7 +2707,7 @@ const LISTING_STEPS = [
   { key: 'sold', label: 'Sold' },
 ]
 
-function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, showToast }: {
+function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, showToast, partnerDropdown }: {
   ls: any
   lead: any
   user: any
@@ -2437,10 +2715,52 @@ function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, sh
   onOpenLog: (type: 'call' | 'whatsapp') => void
   onRefresh: () => void
   showToast: (msg: string) => void
+  partnerDropdown?: { myPartners: any[]; otherPartners: any[] } | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const [visitNotes, setVisitNotes] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Partner tag state
+  const [partnerTagOpen, setPartnerTagOpen] = useState(false)
+  const [partnerTagSearch, setPartnerTagSearch] = useState('')
+  const [partnerTagSaving, setPartnerTagSaving] = useState(false)
+
+  async function handleTagListingPartner(partner: any) {
+    setPartnerTagSaving(true)
+    try {
+      const res = await fetch(`/api/crm/v2/listings/${ls.listing_id}/partner`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerId: partner.partner_id, partnerName: partner.name }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      setPartnerTagOpen(false); showToast(`Partner ${partner.name} tagged`); onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error tagging partner')
+    } finally {
+      setPartnerTagSaving(false)
+    }
+  }
+
+  async function handleRemoveListingPartner() {
+    setPartnerTagSaving(true)
+    try {
+      const res = await fetch(`/api/crm/v2/listings/${ls.listing_id}/partner`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerId: '', partnerName: '' }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      showToast('Partner removed'); onRefresh()
+    } catch (e: any) {
+      showToast(e.message || 'Error removing partner')
+    } finally {
+      setPartnerTagSaving(false)
+    }
+  }
 
   const currentStep = LISTING_STEPS.findIndex(s => s.key === ls.status)
   const isVerified = ls.status === 'admin_approved' || ls.status === 'live' || ls.status === 'sold'
@@ -2545,6 +2865,87 @@ function PanelListingCard({ ls, lead, user, onNavigate, onOpenLog, onRefresh, sh
           </p>
         )}
       </div>
+
+      {/* Partner tag section */}
+      {partnerDropdown !== undefined && (
+        <div className="border-t border-gray-100 px-3 py-2 space-y-1.5" onClick={e => e.stopPropagation()}>
+          {ls.partner_id ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-gray-400">🤝 Partner:</span>
+              <span className="text-[10px] font-medium text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">{ls.partner_name}</span>
+              <button
+                onClick={handleRemoveListingPartner}
+                disabled={partnerTagSaving}
+                className="ml-auto text-[10px] text-gray-400 hover:text-red-500 disabled:opacity-40"
+              >
+                {partnerTagSaving ? '…' : 'Remove'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setPartnerTagOpen(p => !p); setPartnerTagSearch('') }}
+              className="text-[10px] text-violet-600 hover:text-violet-800 flex items-center gap-1"
+            >
+              <span>🤝</span> Tag Partner
+            </button>
+          )}
+
+          {partnerTagOpen && !ls.partner_id && (
+            <div className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <input
+                type="text"
+                autoFocus
+                value={partnerTagSearch}
+                onChange={e => setPartnerTagSearch(e.target.value)}
+                placeholder="Search partners…"
+                className="w-full px-3 py-1.5 text-xs border-b border-gray-100 focus:outline-none"
+              />
+              {(() => {
+                const filtered = (partnerDropdown?.myPartners || []).filter(p =>
+                  !partnerTagSearch || p.name.toLowerCase().includes(partnerTagSearch.toLowerCase())
+                )
+                if (!filtered.length) return null
+                return (
+                  <>
+                    <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50">My Partners</p>
+                    {filtered.map((p: any) => (
+                      <button
+                        key={p.partner_id}
+                        onClick={() => handleTagListingPartner(p)}
+                        disabled={partnerTagSaving}
+                        className="w-full text-left px-3 py-1.5 hover:bg-violet-50 flex items-center justify-between text-xs disabled:opacity-50"
+                      >
+                        <span className="font-medium text-gray-800">{p.name}</span>
+                        <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{p.tier}</span>
+                      </button>
+                    ))}
+                  </>
+                )
+              })()}
+              {(() => {
+                const filtered = (partnerDropdown?.otherPartners || []).filter(p =>
+                  !partnerTagSearch || p.name.toLowerCase().includes(partnerTagSearch.toLowerCase())
+                )
+                if (!filtered.length) return null
+                return (
+                  <>
+                    <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide bg-gray-50">Other Partners</p>
+                    {filtered.map((p: any) => (
+                      <div key={p.partner_id} className="px-3 py-1.5 flex items-center justify-between opacity-50 cursor-not-allowed text-xs">
+                        <span className="text-gray-500">{p.name}</span>
+                        <span className="text-[10px] text-gray-400">→ {p.assigned_rm_name}</span>
+                      </div>
+                    ))}
+                  </>
+                )
+              })()}
+              {(partnerDropdown?.myPartners || []).length === 0 && (partnerDropdown?.otherPartners || []).length === 0 && (
+                <p className="px-3 py-3 text-[11px] text-gray-400 text-center">No active partners found</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Action bar */}
       <div className="border-t border-gray-100 px-3 py-2 flex items-center gap-2" onClick={e => e.stopPropagation()}>
