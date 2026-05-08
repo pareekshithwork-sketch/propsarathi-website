@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { verifyCRMToken } from '@/lib/crmAuth'
-import { runCRMMigration, runCRMUsersMigration } from '@/lib/crmMigration'
+import { runCRMMigration, runCRMUsersMigration, runPartnersMigration } from '@/lib/crmMigration'
 
 export async function GET(request: NextRequest) {
   const token = request.cookies.get('crm_token')?.value
@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
   try {
     await runCRMMigration()
     const usersMigrationResults = await runCRMUsersMigration()
-    return NextResponse.json({ success: true, results: usersMigrationResults })
+    const partnersMigrationResults = await runPartnersMigration()
+    return NextResponse.json({ success: true, results: { users: usersMigrationResults, partners: partnersMigrationResults } })
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })
   }

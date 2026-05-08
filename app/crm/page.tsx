@@ -6,7 +6,7 @@ import {
   Plus, Search, LogOut, X,
   MapPin, Loader2, Building2, User, Menu, Home,
   XCircle, Activity, BarChart3,
-  RefreshCw, BookOpen, Download,
+  RefreshCw, BookOpen, Download, Users2,
 } from "lucide-react"
 import MapEditor from "@/components/MapEditor"
 import { LogoCompact } from "@/components/Logo"
@@ -26,6 +26,7 @@ import { ListingsView } from './components/ListingsView'
 import { PropertiesView } from './components/PropertiesView'
 import { CRMProjectsBrochure } from './components/CRMProjectsBrochure'
 import { BulkImportModal } from './components/BulkImportModal'
+import { PartnersView } from './components/PartnersView'
 
 // ─── Main CRM Page ────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ export default function CRMPage() {
   const [sessionToast, setSessionToast] = useState("")
 
   // ── View ──
-  const [view, setView] = useState<"dashboard" | "leads" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team" | "enquiries" | "listings" | "properties">("dashboard")
+  const [view, setView] = useState<"dashboard" | "leads" | "reports" | "data" | "projects" | "map" | "blog" | "clients" | "referrals" | "team" | "enquiries" | "listings" | "properties" | "partners">("dashboard")
   const [clientsList, setClientsList] = useState<any[]>([])
   const [referralsList, setReferralsList] = useState<any[]>([])
   const [docViewsList, setDocViewsList] = useState<any[]>([])
@@ -678,6 +679,17 @@ export default function CRMPage() {
             </>
           )}
 
+          {/* Partners (rm, gm, admin, super_admin) */}
+          {(user?.role === 'rm' || user?.role === 'gm' || isAdmin) && (
+            <button
+              onClick={() => setView("partners")}
+              className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${view === "partners" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"} ${!sidebarOpen && "justify-center"}`}
+            >
+              <Users2 className="w-5 h-5 flex-shrink-0" />
+              {sidebarOpen && <span className="flex-1 text-left">Partners</span>}
+            </button>
+          )}
+
           {/* Properties (all users) */}
           <button
             onClick={() => setView("properties")}
@@ -892,6 +904,7 @@ export default function CRMPage() {
               onClearHighlight={() => setHighlightListingId('')}
             />
           )}
+          {view === "partners" && <PartnersView user={user} />}
           {view === "properties" && <PropertiesView user={user} />}
           {view === "projects" && (
             isAdmin

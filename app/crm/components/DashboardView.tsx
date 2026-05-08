@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Loader2, Users, AlertCircle, CheckCircle2, Database, Phone, MessageCircle, Calendar, RefreshCw } from 'lucide-react'
+import { Loader2, Users, AlertCircle, CheckCircle2, Database, Phone, MessageCircle, Calendar, RefreshCw, Users2 } from 'lucide-react'
 import type { Lead, HistoryEntry } from '../types'
 import { ScopeToggle, type Scope } from '@/app/crm/components/ScopeToggle'
 
@@ -123,6 +123,15 @@ export function DashboardView({
   })
   const [dashData, setDashData] = useState<any>(null)
   const [dashLoading, setDashLoading] = useState(false)
+  const [reEngagementPartners, setReEngagementPartners] = useState<any[]>([])
+
+  const fetchReEngagement = useCallback(async (s: Scope) => {
+    try {
+      const res = await fetch(`/api/crm/v2/partners?scope=${s}&reEngagement=true&limit=20`, { credentials: 'include' })
+      const d = await res.json()
+      if (d.success) setReEngagementPartners(d.partners)
+    } catch {}
+  }, [])
 
   const fetchDashboard = useCallback(async (s: Scope) => {
     setDashLoading(true)
@@ -135,6 +144,7 @@ export function DashboardView({
   }, [])
 
   useEffect(() => { fetchDashboard(scope) }, [scope, fetchDashboard])
+  useEffect(() => { fetchReEngagement(scope) }, [scope, fetchReEngagement])
 
   const dash = dashData ?? v2Dashboard
   const scopeLabel = scope === 'org' ? 'All' : scope === 'team' ? 'Team' : 'My'
@@ -283,6 +293,31 @@ export function DashboardView({
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Partner Re-engagement */}
+          {reEngagementPartners.length > 0 && (
+            <div className="bg-white rounded-xl border border-orange-200 p-3">
+              <p className="text-xs font-semibold text-orange-700 mb-2 flex items-center gap-1.5">
+                <Users2 className="w-3.5 h-3.5" /> Partner Re-engagement Needed
+              </p>
+              <div className="space-y-1.5">
+                {reEngagementPartners.slice(0, 5).map((p: any) => {
+                  const days = Math.floor(Number(p.days_since_last_referral))
+                  return (
+                    <div key={p.partner_id} className="flex items-center justify-between gap-2 py-1 border-b border-gray-50 last:border-0">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-xs font-medium text-gray-800">{p.name}</span>
+                        <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-1 rounded">{p.tier}</span>
+                      </div>
+                      <span className={`text-xs font-semibold ${days >= 30 ? 'text-red-600' : days >= 20 ? 'text-orange-500' : 'text-yellow-600'}`}>
+                        {days}d inactive
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
