@@ -6,6 +6,7 @@ import ScrollProgressBar from "@/components/ScrollProgressBar"
 import { PortalProvider } from "@/components/PortalProvider"
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration"
 import WhatsAppButton from "@/components/WhatsAppButton"
+import GoogleOneTap from "@/components/GoogleOneTap"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -44,6 +45,7 @@ export default function RootLayout({
           {children}
           <WhatsAppButton />
           <ServiceWorkerRegistration />
+          <GoogleOneTap type="client" />
         </PortalProvider>
         <Analytics />
       </body>
