@@ -103,6 +103,8 @@ export default function CRMPage() {
   const [highlightEnquiryId, setHighlightEnquiryId] = useState('')
   const [highlightListingId, setHighlightListingId] = useState('')
 
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
+
   // ── Auth check on mount ──
   useEffect(() => {
     fetch("/api/crm/auth/me", { credentials: "include" })
@@ -140,10 +142,10 @@ export default function CRMPage() {
     if (view === "projects") {
       loadProjects()
     }
-    if (view === "clients" && user?.role === "admin") {
+    if (view === "clients" && isAdmin) {
       fetch("/api/crm/clients", { credentials: "include" }).then(r => r.json()).then(d => { if (d.clients) setClientsList(d.clients) })
     }
-    if (view === "referrals" && user?.role === "admin") {
+    if (view === "referrals" && isAdmin) {
       fetch("/api/crm/referrals", { credentials: "include" }).then(r => r.json()).then(d => {
         if (d.referrals) setReferralsList(d.referrals)
         if (d.docViews) setDocViewsList(d.docViews)
@@ -312,7 +314,7 @@ export default function CRMPage() {
   }
 
   async function deleteLead(lead: Lead) {
-    if (user?.role !== 'admin') {
+    if (!isAdmin) {
       alert('Only admins can delete leads.')
       return
     }
@@ -731,7 +733,7 @@ export default function CRMPage() {
           </button>
 
           {/* Admin-only items */}
-          {user?.role === "admin" && (
+          {isAdmin && (
             <>
               <button
                 onClick={() => setView("blog")}
@@ -892,7 +894,7 @@ export default function CRMPage() {
           )}
           {view === "properties" && <PropertiesView user={user} />}
           {view === "projects" && (
-            user?.role === "admin"
+            isAdmin
               ? (
                 <ProjectsView
                   projects={crmProjects}
@@ -905,10 +907,10 @@ export default function CRMPage() {
               )
               : <CRMProjectsBrochure user={user} />
           )}
-          {view === "blog" && user?.role === "admin" && (
+          {view === "blog" && isAdmin && (
             <BlogView />
           )}
-          {view === "team" && user?.role === "admin" && (
+          {view === "team" && isAdmin && (
             <TeamView user={user} />
           )}
           {view === "data" && (
@@ -928,7 +930,7 @@ export default function CRMPage() {
           )}
 
           {/* ── CLIENTS VIEW ── */}
-          {view === "clients" && user?.role === "admin" && (
+          {view === "clients" && isAdmin && (
             <div className="p-6 space-y-4">
               <h2 className="text-xl font-bold text-gray-900">Registered Clients</h2>
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -968,7 +970,7 @@ export default function CRMPage() {
           )}
 
           {/* ── REFERRALS VIEW ── */}
-          {view === "referrals" && user?.role === "admin" && (
+          {view === "referrals" && isAdmin && (
             <div className="p-6 space-y-6">
               <h2 className="text-xl font-bold text-gray-900">Referral Intelligence</h2>
 
