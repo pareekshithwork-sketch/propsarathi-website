@@ -28,6 +28,7 @@ export function PartnerProfile({
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [inviteSending, setInviteSending] = useState(false)
   const [toast, setToast] = useState('')
   const [editNotes, setEditNotes] = useState('')
   const [editStatus, setEditStatus] = useState('')
@@ -67,6 +68,20 @@ export function PartnerProfile({
       else showMsg(d.error || 'Error')
     } catch { showMsg('Error') }
     finally { setSaving(false) }
+  }
+
+  async function sendInvite() {
+    setInviteSending(true)
+    try {
+      const res = await fetch('/api/partner/auth/invite', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerId }),
+      })
+      const d = await res.json()
+      showMsg(d.success ? 'Invite email sent!' : d.error || 'Failed to send invite')
+    } catch { showMsg('Failed to send invite') }
+    finally { setInviteSending(false) }
   }
 
   async function toggleTraining() {
@@ -197,10 +212,18 @@ export function PartnerProfile({
                   placeholder="Add internal notes…" />
               </div>
 
-              <button onClick={saveOverview} disabled={saving}
-                className="w-full py-2 bg-[#422D83] text-white rounded-lg text-sm font-medium hover:bg-[#321f6b] disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Save changes
-              </button>
+              <div className="flex gap-2">
+                <button onClick={saveOverview} disabled={saving}
+                  className="flex-1 py-2 bg-[#422D83] text-white rounded-lg text-sm font-medium hover:bg-[#321f6b] disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Save
+                </button>
+                {data?.partner?.email && (
+                  <button onClick={sendInvite} disabled={inviteSending}
+                    className="flex-1 py-2 border border-[#422D83] text-[#422D83] rounded-lg text-sm font-medium hover:bg-violet-50 disabled:opacity-50 flex items-center justify-center gap-2">
+                    {inviteSending ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Send Invite
+                  </button>
+                )}
+              </div>
             </>
           )}
 

@@ -107,6 +107,13 @@ export async function runPartnersMigration(): Promise<string[]> {
         ADD COLUMN IF NOT EXISTS partner_name TEXT DEFAULT ''
     `],
 
+    ['alter crm_partners invite cols', `
+      ALTER TABLE crm_partners
+        ADD COLUMN IF NOT EXISTS invite_token TEXT DEFAULT '',
+        ADD COLUMN IF NOT EXISTS invite_sent_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS kyc_documents JSONB DEFAULT '{}'
+    `],
+
     ['backfill referral_code', `UPDATE crm_partners SET referral_code = partner_id WHERE referral_code IS NULL`],
 
     ['create referral_code trigger fn', `

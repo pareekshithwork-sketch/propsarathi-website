@@ -1,6 +1,8 @@
+import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { getProjectBySlug } from "@/lib/projectsDb"
 import ProjectDetailClient from "@/components/ProjectDetailClient"
+import PartnerLinkTracker from "@/components/PartnerLinkTracker"
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -21,5 +23,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const { slug } = await params
   const project = await getProjectBySlug(slug)
   if (!project) notFound()
-  return <ProjectDetailClient project={project} />
+  return (
+    <>
+      <Suspense>
+        <PartnerLinkTracker />
+      </Suspense>
+      <ProjectDetailClient project={project} />
+    </>
+  )
 }
