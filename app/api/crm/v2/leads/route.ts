@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
+import { validateScope, buildLeadsScopeWhere } from '@/lib/scopeFilter'
 
 function auth(req: NextRequest) {
   const token = req.cookies.get('crm_token')?.value
@@ -39,7 +40,13 @@ export async function GET(request: NextRequest) {
   const showDeleted = type === 'Deleted'
   const showDuplicate = type === 'Duplicate'
   const showUnassigned = type === 'Unassigned'
-  const rmFilter = (user.role === 'rm' || type === 'My Leads') ? user.name : ''
+
+  // Scope filter (takes precedence over legacy rmFilter when ?scope= is present)
+  const rawScope = searchParams.get('scope')
+  const scopeWhere = rawScope
+    ? buildLeadsScopeWhere(validateScope(rawScope, user.role), user.name, user.teamId)
+    : sql``
+  const rmFilter = rawScope ? '' : ((user.role === 'rm' || type === 'My Leads') ? user.name : '')
 
   try {
     const leads = await sql`
@@ -88,6 +95,7 @@ export async function GET(request: NextRequest) {
         ${applyDateFilter && safeDateType === 'created_at' ? sql`AND l.created_at >= ${dateFrom}::date AND l.created_at < (${dateTo}::date + '1 day'::interval)` : sql``}
         ${applyDateFilter && safeDateType === 'updated_at' ? sql`AND l.updated_at >= ${dateFrom}::date AND l.updated_at < (${dateTo}::date + '1 day'::interval)` : sql``}
         ${applyDateFilter && safeDateType === 'deleted_at' ? sql`AND l.deleted_at >= ${dateFrom}::date AND l.deleted_at < (${dateTo}::date + '1 day'::interval)` : sql``}
+        ${scopeWhere}
       GROUP BY l.id
       ORDER BY l.updated_at DESC
       LIMIT ${limit} OFFSET ${offset}
@@ -113,6 +121,7 @@ export async function GET(request: NextRequest) {
           OR (${incLoc}   AND l.customer_location ILIKE ${'%' + search + '%'})
           OR (${incRef}   AND l.referral_phone LIKE ${'%' + search + '%'})
         )
+        ${scopeWhere}
     `
 
     return NextResponse.json({ success: true, leads, total: Number(total) })

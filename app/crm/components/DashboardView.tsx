@@ -1,8 +1,9 @@
 'use client'
 
-import React from 'react'
-import { Loader2, Users, AlertCircle, CheckCircle2, Database, Phone, MessageCircle, Calendar } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Loader2, Users, AlertCircle, CheckCircle2, Database, Phone, MessageCircle, Calendar, RefreshCw } from 'lucide-react'
 import type { Lead, HistoryEntry } from '../types'
+import { ScopeToggle, type Scope } from '@/app/crm/components/ScopeToggle'
 
 function formatScheduled(dateStr: string | null | undefined): string {
   if (!dateStr) return ''
@@ -108,15 +109,37 @@ function WorkColumn({
 }
 
 export function DashboardView({
-  stats, loading, leads, onNavigate, v2Dashboard,
+  stats, loading, leads, onNavigate, v2Dashboard, user,
 }: {
   stats: any
   loading: boolean
   leads: Lead[]
   onNavigate: (v: any) => void
   v2Dashboard?: any
+  user?: any
 }) {
-  if (loading && !stats && !v2Dashboard) {
+  const [scope, setScope] = useState<Scope>(() => {
+    try { return (localStorage.getItem('crm_scope_preference') as Scope) || 'my' } catch { return 'my' }
+  })
+  const [dashData, setDashData] = useState<any>(null)
+  const [dashLoading, setDashLoading] = useState(false)
+
+  const fetchDashboard = useCallback(async (s: Scope) => {
+    setDashLoading(true)
+    try {
+      const res = await fetch(`/api/crm/v2/dashboard?scope=${s}`, { credentials: 'include' })
+      const d = await res.json()
+      if (d.success) setDashData(d)
+    } catch {}
+    finally { setDashLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchDashboard(scope) }, [scope, fetchDashboard])
+
+  const dash = dashData ?? v2Dashboard
+  const scopeLabel = scope === 'org' ? 'All' : scope === 'team' ? 'Team' : 'My'
+
+  if (loading && !stats && !dash) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
@@ -168,22 +191,41 @@ export function DashboardView({
     { label: 'Booked', value: stats?.booked, color: 'border-violet-500', bg: 'bg-violet-50', text: 'text-violet-700', icon: '🏆' },
   ]
 
-  const ms = v2Dashboard?.myStats
+  const ms = dash?.myStats
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
 
       {/* ── TODAY'S WORK ── */}
-      {v2Dashboard && (
+      {dash && (
         <div className="space-y-3">
-          <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-            <span className="text-base">📋</span> Today&apos;s Work
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+              <span className="text-base">📋</span> Today&apos;s Work
+            </h2>
+            <div className="flex items-center gap-2">
+              <ScopeToggle
+                scope={scope}
+                role={user?.role || 'rm'}
+                onChange={s => {
+                  setScope(s)
+                  try { localStorage.setItem('crm_scope_preference', s) } catch {}
+                }}
+              />
+              <button
+                onClick={() => fetchDashboard(scope)}
+                className={`p-1.5 ${dashLoading ? 'text-[#422D83]' : 'text-gray-400 hover:text-gray-600'}`}
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${dashLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
 
-          {/* Personal stats row */}
+          {/* Stats row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {[
-              { label: 'My Leads', value: ms?.totalLeads ?? 0, bg: 'bg-[#422D83]' },
+              { label: `${scopeLabel} Leads`, value: ms?.totalLeads ?? 0, bg: 'bg-[#422D83]' },
               { label: 'Active Enquiries', value: ms?.activeEnquiries ?? 0, bg: 'bg-blue-500' },
               { label: 'Booked This Month', value: ms?.bookedThisMonth ?? 0, bg: 'bg-green-600' },
               { label: 'Site Visits / Month', value: ms?.siteVisitsThisMonth ?? 0, bg: 'bg-cyan-500' },
@@ -199,24 +241,24 @@ export function DashboardView({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <WorkColumn
               title="🔴 Overdue"
-              count={v2Dashboard.overdueEnquiries?.length ?? 0}
-              items={v2Dashboard.overdueEnquiries || []}
+              count={dash.overdueEnquiries?.length ?? 0}
+              items={dash.overdueEnquiries || []}
               emptyMsg="No overdue tasks"
               headerCls="bg-red-50 text-red-700 border-b border-red-100"
               accentCls="border-red-200"
             />
             <WorkColumn
               title="🟡 Due Today"
-              count={v2Dashboard.dueTodayEnquiries?.length ?? 0}
-              items={v2Dashboard.dueTodayEnquiries || []}
+              count={dash.dueTodayEnquiries?.length ?? 0}
+              items={dash.dueTodayEnquiries || []}
               emptyMsg="Nothing due today"
               headerCls="bg-amber-50 text-amber-700 border-b border-amber-100"
               accentCls="border-amber-200"
             />
             <WorkColumn
               title="🔵 Site Visits Today"
-              count={v2Dashboard.siteVisitsToday?.length ?? 0}
-              items={v2Dashboard.siteVisitsToday || []}
+              count={dash.siteVisitsToday?.length ?? 0}
+              items={dash.siteVisitsToday || []}
               emptyMsg="No site visits today"
               headerCls="bg-cyan-50 text-cyan-700 border-b border-cyan-100"
               accentCls="border-cyan-200"
@@ -224,11 +266,11 @@ export function DashboardView({
           </div>
 
           {/* Recent Activity */}
-          {(v2Dashboard.recentActivity || []).length > 0 && (
+          {(dash.recentActivity || []).length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-3">
               <p className="text-xs font-semibold text-gray-600 mb-2">Recent Activity</p>
               <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                {v2Dashboard.recentActivity.map((a: any) => (
+                {dash.recentActivity.map((a: any) => (
                   <div key={a.id} className="flex items-start gap-2 py-1 border-b border-gray-50 last:border-0">
                     <div className="w-1.5 h-1.5 rounded-full bg-[#422D83]/40 mt-1.5 flex-shrink-0" />
                     <div className="min-w-0 flex-1">

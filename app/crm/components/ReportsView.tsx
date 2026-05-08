@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect, useCallback } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { ScopeToggle, type Scope } from '@/app/crm/components/ScopeToggle'
 
 const PURPLE = ['#422D83', '#5b40b0', '#7d65cc', '#9e8ada', '#c0b4e9']
 
@@ -16,8 +17,24 @@ const STAGE_LABEL: Record<string, string> = {
 
 function sl(stage: string) { return STAGE_LABEL[stage] || stage }
 
-export function ReportsView({ v2Leads }: { v2Leads: any[] }) {
-  const leads = useMemo(() => (v2Leads || []).filter((l: any) => !l.is_deleted), [v2Leads])
+export function ReportsView({ v2Leads, user }: { v2Leads: any[]; user?: any }) {
+  const [scope, setScope] = useState<Scope>(() => {
+    try { return (localStorage.getItem('crm_scope_preference') as Scope) || 'my' } catch { return 'my' }
+  })
+  const [reportLeads, setReportLeads] = useState<any[] | null>(null)
+
+  const fetchReportLeads = useCallback(async (s: Scope) => {
+    try {
+      const res = await fetch(`/api/crm/v2/leads?scope=${s}&limit=500`, { credentials: 'include' })
+      const d = await res.json()
+      if (d.success) setReportLeads(d.leads)
+    } catch {}
+  }, [])
+
+  useEffect(() => { fetchReportLeads(scope) }, [scope, fetchReportLeads])
+
+  const source = reportLeads ?? v2Leads
+  const leads = useMemo(() => (source || []).filter((l: any) => !l.is_deleted), [source])
 
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -62,6 +79,19 @@ export function ReportsView({ v2Leads }: { v2Leads: any[] }) {
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50 p-4 space-y-4">
+      {/* Header with scope toggle */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-gray-800">Reports</h2>
+        <ScopeToggle
+          scope={scope}
+          role={user?.role || 'rm'}
+          onChange={s => {
+            setScope(s)
+            try { localStorage.setItem('crm_scope_preference', s) } catch {}
+          }}
+        />
+      </div>
+
       {/* KPI row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[

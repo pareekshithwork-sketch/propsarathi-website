@@ -864,7 +864,7 @@ export default function CRMPage() {
         {/* Content */}
         <div className="flex-1 overflow-hidden">
           {view === "dashboard" && (
-            <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} v2Dashboard={v2Dashboard} />
+            <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} v2Dashboard={v2Dashboard} user={user} />
           )}
           {view === "leads" && (
             <LeadsView
@@ -876,7 +876,7 @@ export default function CRMPage() {
             />
           )}
           {view === "reports" && (
-            <ReportsView v2Leads={v2Leads} />
+            <ReportsView v2Leads={v2Leads} user={user} />
           )}
           {view === "enquiries" && (
             <EnquiriesView
@@ -926,6 +926,7 @@ export default function CRMPage() {
               setConvertForm={setConvertForm}
               onConvert={convertToLead}
               savingData={savingData}
+              user={user}
             />
           )}
 

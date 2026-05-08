@@ -1,14 +1,17 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
+import { validateScope, buildEnquiriesScopeWhere, buildLeadsScopeWhere } from '@/lib/scopeFilter'
 
 export async function GET(request: NextRequest) {
   const token = request.cookies.get('crm_token')?.value
   const user = verifyCRMToken(token || '')
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
-  const isRm = user.role === 'rm'
-  const rmName = user.name
+  const { searchParams } = new URL(request.url)
+  const scope = validateScope(searchParams.get('scope'), user.role)
+  const eScope = buildEnquiriesScopeWhere(scope, user.name, user.teamId)
+  const lScope = buildLeadsScopeWhere(scope, user.name, user.teamId)
 
   try {
     const results = await Promise.allSettled([
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
           AND e.status = 'active'
           AND e.stage NOT IN ('Book', 'Not Interested', 'Drop')
           AND l.is_deleted = FALSE
-          AND (${isRm} = FALSE OR l.assigned_rm = ${rmName})
+          ${eScope}
         ORDER BY e.scheduled_at ASC
         LIMIT 20
       `,
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
         WHERE DATE(e.scheduled_at) = CURRENT_DATE
           AND e.status = 'active'
           AND l.is_deleted = FALSE
-          AND (${isRm} = FALSE OR l.assigned_rm = ${rmName})
+          ${eScope}
         ORDER BY e.scheduled_at ASC
         LIMIT 20
       `,
@@ -54,7 +57,7 @@ export async function GET(request: NextRequest) {
         WHERE e.stage = 'Schedule Site Visit'
           AND DATE(e.scheduled_at) = CURRENT_DATE
           AND l.is_deleted = FALSE
-          AND (${isRm} = FALSE OR l.assigned_rm = ${rmName})
+          ${eScope}
         ORDER BY e.scheduled_at ASC
         LIMIT 10
       `,
@@ -62,29 +65,29 @@ export async function GET(request: NextRequest) {
       // Stats
       sql`
         SELECT
-          (SELECT COUNT(*) FROM crm_leads_v2
-           WHERE is_deleted = FALSE
-             AND (${isRm} = FALSE OR assigned_rm = ${rmName})
+          (SELECT COUNT(*) FROM crm_leads_v2 l
+           WHERE l.is_deleted = FALSE
+             ${lScope}
           ) AS total_leads,
           (SELECT COUNT(*) FROM crm_enquiries e
            JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
            WHERE e.status = 'active'
              AND l.is_deleted = FALSE
-             AND (${isRm} = FALSE OR l.assigned_rm = ${rmName})
+             ${eScope}
           ) AS active_enquiries,
           (SELECT COUNT(*) FROM crm_enquiries e
            JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
            WHERE e.stage = 'Book'
              AND DATE_TRUNC('month', e.updated_at) = DATE_TRUNC('month', NOW())
              AND l.is_deleted = FALSE
-             AND (${isRm} = FALSE OR l.assigned_rm = ${rmName})
+             ${eScope}
           ) AS booked_this_month,
           (SELECT COUNT(*) FROM crm_enquiries e
            JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
            WHERE e.stage = 'Schedule Site Visit'
              AND DATE_TRUNC('month', e.scheduled_at) = DATE_TRUNC('month', NOW())
              AND l.is_deleted = FALSE
-             AND (${isRm} = FALSE OR l.assigned_rm = ${rmName})
+             ${eScope}
           ) AS site_visits_this_month
       `,
 
@@ -93,9 +96,9 @@ export async function GET(request: NextRequest) {
         SELECT a.id, a.activity_type, a.title, a.description,
                a.performed_by, a.created_at, a.lead_id
         FROM crm_activity_log a
-        ${isRm
-          ? sql`JOIN crm_leads_v2 l ON l.lead_id = a.lead_id WHERE l.assigned_rm = ${rmName}`
-          : sql`WHERE TRUE`
+        ${scope === 'org'
+          ? sql`WHERE TRUE`
+          : sql`JOIN crm_leads_v2 l ON l.lead_id = a.lead_id WHERE l.is_deleted = FALSE ${eScope}`
         }
         ORDER BY a.created_at DESC
         LIMIT 10

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { ScopeToggle, type Scope } from '@/app/crm/components/ScopeToggle'
 import {
   Users, Phone, MessageCircle, Mail, RefreshCw, Plus, Search,
   X, Check, Loader2, Trash2, Calendar, FileText,
@@ -304,6 +305,27 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
   const [enquiryViewData, setEnquiryViewData] = useState<any[]>([])
   const [enquiryViewLoading, setEnquiryViewLoading] = useState(false)
 
+  // ── Scope ──
+  const [scope, setScope] = useState<Scope>(() => {
+    try { return (localStorage.getItem('crm_scope_preference') as Scope) || 'my' } catch { return 'my' }
+  })
+  const [internalLeads, setInternalLeads] = useState<any[] | null>(null)
+  const [scopeLoading, setScopeLoading] = useState(false)
+
+  const fetchLeads = useCallback(async (s: Scope) => {
+    setScopeLoading(true)
+    try {
+      const res = await fetch(`/api/crm/v2/leads?scope=${s}&limit=200`, { credentials: 'include' })
+      const d = await res.json()
+      if (d.success) setInternalLeads(d.leads)
+    } catch {}
+    finally { setScopeLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    fetchLeads(scope)
+  }, [scope, fetchLeads])
+
   // ── Outside-click: close dropdowns ──
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -446,8 +468,9 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
     (filters.tags.length > 0 ? 1 : 0)
 
   const filteredLeads = useMemo(() => {
-    if (!v2Leads) return []
-    const active = v2Leads.filter((l: any) => !l.is_deleted)
+    const source = internalLeads ?? v2Leads
+    if (!source) return []
+    const active = source.filter((l: any) => !l.is_deleted)
     let result: any[] = active
 
     if (stageTab !== 'All') {
@@ -509,7 +532,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
       const bT = b[fieldName] ? new Date(b[fieldName]).getTime() : 0
       return sortDir === 'desc' ? bT - aT : aT - bT
     })
-  }, [v2Leads, stageTab, debouncedSearch, filters, dateType, dateFrom, dateTo, searchFields, sortBy, sortDir])
+  }, [internalLeads, v2Leads, stageTab, debouncedSearch, filters, dateType, dateFrom, dateTo, searchFields, sortBy, sortDir])
 
   const allSelected = filteredLeads.length > 0 && filteredLeads.every((l: any) => selectedLeadIds.has(l.lead_id))
   const someSelected = filteredLeads.some((l: any) => selectedLeadIds.has(l.lead_id))
@@ -806,8 +829,20 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
           >
             <Plus className="w-3.5 h-3.5" /> Add Lead
           </button>
-          <button onClick={onReload} className="flex-shrink-0 text-gray-400 hover:text-gray-600 p-1.5" title="Refresh">
-            <RefreshCw className="w-4 h-4" />
+          <ScopeToggle
+            scope={scope}
+            role={user?.role || 'rm'}
+            onChange={s => {
+              setScope(s)
+              try { localStorage.setItem('crm_scope_preference', s) } catch {}
+            }}
+          />
+          <button
+            onClick={() => { onReload(); fetchLeads(scope) }}
+            className={`flex-shrink-0 p-1.5 ${scopeLoading ? 'text-[#422D83]' : 'text-gray-400 hover:text-gray-600'}`}
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${scopeLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
