@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { PhoneInput } from '@/components/PhoneInput'
+import { OtpInput } from '@/components/OtpInput'
 import { Loader2 } from 'lucide-react'
 
 type Step = 'phone' | 'otp'
@@ -37,15 +38,16 @@ export default function PartnerLoginPage() {
     }
   }
 
-  async function verifyOtp() {
+  async function verifyOtp(codeArg?: string) {
+    const code = codeArg ?? otp
     setError('')
-    if (!otp.trim()) { setError('Enter the OTP'); return }
+    if (!code.trim()) { setError('Enter the OTP'); return }
     setLoading(true)
     try {
       const res = await fetch('/api/partner/auth/login-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: countryCode + phone, otp }),
+        body: JSON.stringify({ phone: countryCode + phone, otp: code }),
       })
       const d = await res.json()
       if (!d.success) throw new Error(d.error || 'Invalid OTP')
@@ -78,6 +80,7 @@ export default function PartnerLoginPage() {
                   countryCode={countryCode}
                   onCountryChange={setCountryCode}
                   placeholder="Enter your number"
+                  context="partner"
                 />
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
@@ -95,19 +98,11 @@ export default function PartnerLoginPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Enter OTP</label>
                 <p className="text-xs text-gray-500 mb-3">Sent to {countryCode} {phone} via WhatsApp</p>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  placeholder="6-digit code"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 tracking-widest text-center text-lg font-semibold"
-                />
+                <OtpInput length={6} disabled={loading} onComplete={(code) => { setOtp(code); verifyOtp(code) }} />
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button
-                onClick={verifyOtp}
+                onClick={() => verifyOtp()}
                 disabled={loading}
                 className="w-full bg-violet-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-violet-700 disabled:opacity-60 flex items-center justify-center gap-2 transition-colors"
               >

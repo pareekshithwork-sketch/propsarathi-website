@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react"
 import { X, Mail, Shield, CheckCircle2 } from "lucide-react"
 import { PhoneInput } from "@/components/PhoneInput"
+import { OtpInput } from "@/components/OtpInput"
 
 interface Props {
   onSuccess: (viewer: any) => void
@@ -24,33 +25,6 @@ function Spinner() {
   return <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />
 }
 
-function OtpInput({
-  value,
-  onChange,
-  onComplete,
-}: {
-  value: string
-  onChange: (v: string) => void
-  onComplete?: () => void
-}) {
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const v = e.target.value.replace(/\D/g, '').slice(0, 6)
-    onChange(v)
-    if (v.length === 6 && onComplete) onComplete()
-  }
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={value}
-      onChange={handleChange}
-      placeholder="• • • • • •"
-      maxLength={6}
-      autoFocus
-      className="w-full border border-gray-200 rounded-xl px-3 py-3 text-center text-2xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 focus:border-[#422D83] transition-colors bg-gray-50/50 placeholder:tracking-widest placeholder:text-gray-200"
-    />
-  )
-}
 
 function ResendButton({ onResend, disabled }: { onResend: () => void; disabled: boolean }) {
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN)
@@ -135,14 +109,15 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
     setLoading(false)
   }
 
-  async function verifyPhoneOtp() {
-    if (phoneOtp.length < 6) { setError("Enter 6-digit OTP"); return }
+  async function verifyPhoneOtp(codeArg?: string) {
+    const code = codeArg ?? phoneOtp
+    if (code.length < 6) { setError("Enter 6-digit OTP"); return }
     setLoading(true); clearError()
     try {
       const res = await fetch("/api/auth/otp/whatsapp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: phone.replace(/\D/g, ''), countryCode, action: "verify", otp: phoneOtp }),
+        body: JSON.stringify({ phone: phone.replace(/\D/g, ''), countryCode, action: "verify", otp: code }),
       })
       const d = await res.json()
       if (!d.success) { setError(d.error || "Invalid OTP"); setLoading(false); return }
@@ -174,15 +149,16 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
     setLoading(false)
   }
 
-  async function verifyEmailOtpAndComplete() {
-    if (emailOtp.length < 6) { setError("Enter 6-digit OTP"); return }
+  async function verifyEmailOtpAndComplete(codeArg?: string) {
+    const code = codeArg ?? emailOtp
+    if (code.length < 6) { setError("Enter 6-digit OTP"); return }
     setLoading(true); clearError()
     try {
       // First verify the email OTP
       const verifyRes = await fetch("/api/auth/otp/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, action: "verify", otp: emailOtp }),
+        body: JSON.stringify({ email, action: "verify", otp: code }),
       })
       const verifyData = await verifyRes.json()
       if (!verifyData.success) { setError(verifyData.error || "Invalid OTP"); setLoading(false); return }
@@ -221,14 +197,15 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
     setLoading(false)
   }
 
-  async function verifyEmailOnlyOtp() {
-    if (!emailOtp || emailOtp.length < 6) { setError("Enter 6-digit OTP"); return }
+  async function verifyEmailOnlyOtp(codeArg?: string) {
+    const code = codeArg ?? emailOtp
+    if (!code || code.length < 6) { setError("Enter 6-digit OTP"); return }
     setLoading(true); clearError()
     try {
       const verifyRes = await fetch("/api/auth/otp/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "verify", email, otp: emailOtp }),
+        body: JSON.stringify({ action: "verify", email, otp: code }),
       })
       const d = await verifyRes.json()
       if (!d.success) { setError(d.error || "Invalid OTP"); setLoading(false); return }
@@ -386,6 +363,7 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
                       countryCode={countryCode}
                       onCountryChange={setCountryCode}
                       placeholder="Phone number"
+                      context="client"
                     />
                   </div>
                   {error && <p className="text-red-500 text-sm">{error}</p>}
@@ -408,11 +386,11 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
                   <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-sm text-green-700">
                     OTP sent to <strong>{countryCode} {phone}</strong> on WhatsApp
                   </div>
-                  <OtpInput value={phoneOtp} onChange={setPhoneOtp} onComplete={verifyPhoneOtp} />
+                  <OtpInput length={6} disabled={loading} onComplete={(code) => { setPhoneOtp(code); verifyPhoneOtp(code) }} />
                   {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                   <button
-                    onClick={verifyPhoneOtp}
-                    disabled={loading || phoneOtp.length < 6}
+                    onClick={() => verifyPhoneOtp()}
+                    disabled={loading}
                     className="w-full text-white font-semibold rounded-xl py-3 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
                     style={{ backgroundColor: "#422D83" }}
                   >
@@ -466,11 +444,11 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-sm text-blue-700">
                     OTP sent to <strong>{email}</strong>
                   </div>
-                  <OtpInput value={emailOtp} onChange={setEmailOtp} onComplete={verifyEmailOtpAndComplete} />
+                  <OtpInput length={6} disabled={loading} onComplete={(code) => { setEmailOtp(code); verifyEmailOtpAndComplete(code) }} />
                   {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                   <button
-                    onClick={verifyEmailOtpAndComplete}
-                    disabled={loading || emailOtp.length < 6}
+                    onClick={() => verifyEmailOtpAndComplete()}
+                    disabled={loading}
                     className="w-full text-white font-semibold rounded-xl py-3 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
                     style={{ backgroundColor: "#422D83" }}
                   >
@@ -524,11 +502,11 @@ export default function PortalLoginModal({ onSuccess, onClose, forced = false, p
                 </div>
                 <p className="text-sm text-gray-600">OTP sent to <strong>{email}</strong></p>
               </div>
-              <OtpInput value={emailOtp} onChange={setEmailOtp} onComplete={verifyEmailOnlyOtp} />
+              <OtpInput length={6} disabled={loading} onComplete={(code) => { setEmailOtp(code); verifyEmailOnlyOtp(code) }} />
               {error && <p className="text-red-500 text-sm text-center">{error}</p>}
               <button
-                onClick={verifyEmailOnlyOtp}
-                disabled={loading || emailOtp.length < 6}
+                onClick={() => verifyEmailOnlyOtp()}
+                disabled={loading}
                 className="w-full text-white font-semibold rounded-xl py-3 text-sm disabled:opacity-60 flex items-center justify-center gap-2"
                 style={{ backgroundColor: "#422D83" }}
               >

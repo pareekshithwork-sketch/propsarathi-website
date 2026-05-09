@@ -1,10 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Plus, Search, RefreshCw, X } from 'lucide-react'
+import { Plus, Search, RefreshCw, X, AlertTriangle } from 'lucide-react'
 import { ScopeToggle, type Scope } from '@/app/crm/components/ScopeToggle'
 import { PartnersList } from '@/app/crm/components/PartnersList'
 import { PartnerProfile } from '@/app/crm/components/PartnerProfile'
+import { PhoneInput, type DuplicateInfo } from '@/components/PhoneInput'
 
 const STATUS_FILTERS = ['All', 'Active', 'Pending', 'KYC Pending', 'Training Pending', 'Inactive', 'Suspended']
 const PROFESSION_TYPES = ['Individual', 'Real Estate Broker', 'Corporate Employee', 'Financial Advisor', 'Interior Designer', 'NRI', 'Other']
@@ -33,6 +34,7 @@ export function PartnersView({ user }: { user: any }) {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [rms, setRms] = useState<any[]>([])
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateInfo | null>(null)
 
   function showMsg(m: string) { setToast(m); setTimeout(() => setToast(''), 3500) }
 
@@ -81,6 +83,7 @@ export function PartnersView({ user }: { user: any }) {
         showMsg(`Partner ${d.partner.name} added — ID: ${d.partner.partner_id}`)
         setShowAdd(false)
         setForm(EMPTY_FORM)
+        setDuplicateWarning(null)
         fetchPartners()
       } else showMsg(d.error || 'Error adding partner')
     } catch { showMsg('An error occurred') }
@@ -151,10 +154,33 @@ export function PartnersView({ user }: { user: any }) {
                   <div><label className="text-xs text-gray-600 mb-1 block">Full Name *</label>
                     <input value={form.name} onChange={f('name')} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/40" placeholder="Partner name" /></div>
                   <div><label className="text-xs text-gray-600 mb-1 block">Phone *</label>
-                    <div className="flex gap-1">
-                      <input value={form.countryCode} onChange={f('countryCode')} className="w-16 border border-gray-300 rounded-lg px-2 py-2 text-sm focus:outline-none" placeholder="+91" />
-                      <input value={form.phone} onChange={f('phone')} className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#422D83]/40" placeholder="Phone number" />
-                    </div>
+                    <PhoneInput
+                      value={form.phone}
+                      onChange={v => { setForm(p => ({ ...p, phone: v })); setDuplicateWarning(null) }}
+                      countryCode={form.countryCode}
+                      onCountryChange={v => setForm(p => ({ ...p, countryCode: v }))}
+                      placeholder="Phone number"
+                      context="crm_partner"
+                      onDuplicateFound={info => setDuplicateWarning(info)}
+                    />
+                    {duplicateWarning && (
+                      <div className="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-500" />
+                        <span className="flex-1">
+                          Already registered as <strong>{duplicateWarning.name}</strong>
+                          {duplicateWarning.assignedRM && ` (RM: ${duplicateWarning.assignedRM})`}
+                        </span>
+                        {duplicateWarning.partnerId && (
+                          <button
+                            type="button"
+                            onClick={() => { setShowAdd(false); setSelectedPartnerId(duplicateWarning.partnerId!) }}
+                            className="text-amber-700 underline font-medium whitespace-nowrap hover:text-amber-900"
+                          >
+                            View Partner
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div><label className="text-xs text-gray-600 mb-1 block">Email</label>

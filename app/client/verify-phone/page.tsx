@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { LogoCompact } from '@/components/Logo'
 import { PhoneInput } from '@/components/PhoneInput'
+import { OtpInput } from '@/components/OtpInput'
 
 const RESEND_COOLDOWN = 30
 
@@ -22,7 +23,7 @@ function VerifyPhoneForm() {
   const [loading, setLoading] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const otpRef = useRef<HTMLInputElement>(null)
+  const otpRef = useRef<HTMLInputElement>(null)  // kept for focus compat
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
@@ -70,16 +71,17 @@ function VerifyPhoneForm() {
     setLoading(false)
   }
 
-  async function verifyAndComplete() {
+  async function verifyAndComplete(codeArg?: string) {
+    const code = codeArg ?? otp
     setError('')
-    if (otp.length !== 6) { setError('Please enter the 6-digit OTP'); return }
+    if (code.length !== 6) { setError('Please enter the 6-digit OTP'); return }
     setLoading(true)
     try {
       // Verify WhatsApp OTP
       const verifyRes = await fetch('/api/auth/otp/whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, countryCode, action: 'verify', otp }),
+        body: JSON.stringify({ phone, countryCode, action: 'verify', otp: code }),
       })
       const verifyData = await verifyRes.json()
       if (!verifyRes.ok) { setError(verifyData.error || 'Invalid OTP'); setLoading(false); return }
@@ -134,6 +136,7 @@ function VerifyPhoneForm() {
                   countryCode={countryCode}
                   onCountryChange={setCountryCode}
                   placeholder="98800 00000"
+                  context="client"
                 />
               </div>
               {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-100">{error}</p>}
@@ -173,26 +176,16 @@ function VerifyPhoneForm() {
               </div>
               {info && <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-2 border border-green-100">{info}</p>}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                <label className="block text-xs font-semibold text-gray-600 mb-3 uppercase tracking-wide">
                   Enter 6-digit OTP
                 </label>
-                <input
-                  ref={otpRef}
-                  type="text"
-                  inputMode="numeric"
-                  value={otp}
-                  onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="• • • • • •"
-                  maxLength={6}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-center text-xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-[#422D83]/30 focus:border-[#422D83] transition-colors bg-gray-50/50 placeholder:tracking-widest placeholder:text-gray-300"
-                  onKeyDown={e => e.key === 'Enter' && verifyAndComplete()}
-                />
+                <OtpInput length={6} onComplete={(code) => { setOtp(code); verifyAndComplete(code) }} />
               </div>
               {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 border border-red-100">{error}</p>}
               <button
                 type="button"
-                onClick={verifyAndComplete}
-                disabled={loading || otp.length !== 6}
+                onClick={() => verifyAndComplete()}
+                disabled={loading}
                 className="w-full bg-[#422D83] hover:bg-[#2d1a60] text-white font-semibold py-2.5 rounded-xl transition-all disabled:opacity-60"
               >
                 {loading ? (
