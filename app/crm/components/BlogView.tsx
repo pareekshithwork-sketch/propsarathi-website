@@ -11,6 +11,7 @@ export function BlogView() {
   const [form, setForm] = useState({ title: '', excerpt: '', content: '', category: 'General', tags: '', author_name: '', cover_image: '', reading_time: 5, status: 'draft' })
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   const CATEGORIES = ['General', 'Investment Guide', 'Market Trends', 'NRI Investment', 'Bangalore', 'Dubai', 'Legal & Finance']
 
@@ -49,9 +50,15 @@ export function BlogView() {
   }
 
   async function deletePost(id: number) {
-    if (!confirm('Delete this post permanently?')) return
+    setConfirmDeleteId(id)
+  }
+
+  async function confirmDelete() {
+    if (!confirmDeleteId) return
+    const id = confirmDeleteId
+    setConfirmDeleteId(null)
     setDeletingId(id)
-    await fetch(`/api/crm/blog/${id}`, { credentials: 'include',  method: 'DELETE' })
+    await fetch(`/api/crm/blog/${id}`, { credentials: 'include', method: 'DELETE' })
     setDeletingId(null)
     loadPosts()
   }
@@ -172,6 +179,24 @@ export function BlogView() {
               <button onClick={save} disabled={saving || !form.title} className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 {editing ? 'Save Changes' : 'Create Post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm */}
+      {confirmDeleteId !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+            <h3 className="text-base font-bold text-gray-900">Delete Post</h3>
+            <p className="text-sm text-gray-600">This will permanently delete the blog post. This action cannot be undone.</p>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setConfirmDeleteId(null)} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={confirmDelete} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold">
+                Delete
               </button>
             </div>
           </div>

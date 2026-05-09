@@ -518,6 +518,7 @@ function AddListingPanel({ user, onClose, onSuccess }: {
     sellerNotes: '',
   })
   const [saving, setSaving] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
   const showBedrooms = !['Plot', 'Commercial', 'Office'].includes(form.propertyType)
 
@@ -564,7 +565,7 @@ function AddListingPanel({ user, onClose, onSuccess }: {
       if (!data.success) throw new Error(data.error)
       onSuccess()
     } catch (e: any) {
-      alert(e.message || 'Error saving listing')
+      setErrorMsg(e.message || 'Error saving listing')
     } finally {
       setSaving(false)
     }
@@ -779,6 +780,14 @@ function AddListingPanel({ user, onClose, onSuccess }: {
           />
         </div>
       </div>
+
+      {/* Error */}
+      {errorMsg && (
+        <div className="mx-5 mb-3 px-3 py-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center justify-between">
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg('')} className="ml-2 text-red-400 hover:text-red-600">×</button>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="border-t border-gray-200 px-5 py-3 flex justify-end gap-3 flex-shrink-0">

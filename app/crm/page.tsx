@@ -12,7 +12,7 @@ import MapEditor from "@/components/MapEditor"
 import { LogoCompact } from "@/components/Logo"
 import type { Lead, DataRecord, HistoryEntry, CRMUser } from './types'
 import { EMPTY_LEAD_FORM, SOURCE_OPTIONS } from './constants'
-import { FormField, Input, Select, Textarea } from './components/shared'
+import { FormField, Input, Select, Textarea, Toast, ConfirmDialog } from './components/shared'
 import { DashboardView } from './components/DashboardView'
 import { LeadsView } from './components/LeadsView'
 import { LeadModal } from './components/LeadModal'
@@ -102,6 +102,15 @@ export default function CRMPage() {
   // ── Cross-view navigation (from lead panel → enquiries/listings) ──
   const [highlightEnquiryId, setHighlightEnquiryId] = useState('')
   const [highlightListingId, setHighlightListingId] = useState('')
+
+  // ── Mobile + UX ──
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [crmToast, setCrmToast] = useState<{ message: string; type?: 'default' | 'success' | 'error' } | null>(null)
+  const [confirmDeleteLead, setConfirmDeleteLead] = useState<Lead | null>(null)
+
+  function showToast(message: string, type: 'default' | 'success' | 'error' = 'default') {
+    setCrmToast({ message, type })
+  }
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
 
@@ -307,16 +316,20 @@ export default function CRMPage() {
     setSavingNote(false)
   }
 
-  async function deleteLead(lead: Lead) {
+  function deleteLead(lead: Lead) {
     if (!isAdmin) {
-      alert('Only admins can delete leads.')
+      showToast('Only admins can delete leads.', 'error')
       return
     }
-    const typed = prompt(`Type DELETE to confirm removing lead "${lead.clientName}":`)
-    if (typed !== 'DELETE') return
+    setConfirmDeleteLead(lead)
+  }
+
+  async function confirmAndDeleteLead(lead: Lead) {
+    setConfirmDeleteLead(null)
     await fetch(`/api/crm/leads/${lead.leadId}`, { method: "DELETE", credentials: "include" })
     setLeads(prev => prev.filter(l => l.leadId !== lead.leadId))
     if (selectedLead?.leadId === lead.leadId) setSelectedLead(null)
+    showToast('Lead deleted.', 'default')
   }
 
   // ── Add/Edit Lead ──
@@ -372,7 +385,7 @@ export default function CRMPage() {
         })
         const d = await res.json()
         if (!d.success && !d.duplicate) {
-          alert(d.error || "Failed to save lead. Please try again.")
+          showToast(d.error || "Failed to save lead. Please try again.", 'error')
           setSavingLead(false)
           return
         }
@@ -390,7 +403,7 @@ export default function CRMPage() {
       loadAll()
     } catch (e) {
       console.error("saveLead error:", e)
-      alert("Failed to save lead. Please try again.")
+      showToast("Failed to save lead. Please try again.", 'error')
     }
     setSavingLead(false)
   }
@@ -415,7 +428,7 @@ export default function CRMPage() {
       }
     } catch (e) {
       console.error("saveData error:", e)
-      alert("Failed to save record. Please try again.")
+      showToast("Failed to save record. Please try again.", 'error')
     }
     setSavingData(false)
   }
@@ -630,8 +643,8 @@ export default function CRMPage() {
   // ── CRM App ──
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? "w-56" : "w-14"} bg-[#1a1f2e] text-white flex flex-col transition-all duration-200 flex-shrink-0`}>
+      {/* Sidebar — desktop only */}
+      <aside className={`${sidebarOpen ? "w-56" : "w-14"} hidden lg:flex bg-[#1a1f2e] text-white flex-col transition-all duration-200 flex-shrink-0`}>
         {/* Logo */}
         <div className={`flex items-center gap-2 p-4 border-b border-white/10 ${!sidebarOpen && "justify-center"}`}>
           {sidebarOpen ? (
@@ -839,11 +852,16 @@ export default function CRMPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
         <header className="bg-white border-b border-gray-200 flex items-center gap-3 px-4 py-2.5 flex-shrink-0">
+          {/* Desktop: sidebar collapse toggle */}
           {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)} className="text-gray-500 hover:text-gray-700">
+            <button onClick={() => setSidebarOpen(true)} className="hidden lg:block text-gray-500 hover:text-gray-700">
               <Menu className="w-5 h-5" />
             </button>
           )}
+          {/* Mobile: hamburger opens drawer */}
+          <button onClick={() => setMobileSidebarOpen(true)} className="lg:hidden text-gray-500 hover:text-gray-700">
+            <Menu className="w-5 h-5" />
+          </button>
           <h1 className="font-semibold text-gray-900 text-base capitalize">{view}</h1>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
@@ -894,7 +912,7 @@ export default function CRMPage() {
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden pb-14 lg:pb-0">
           {view === "dashboard" && (
             <DashboardView loading={loading} onNavigate={setView} v2Dashboard={v2Dashboard} user={user} />
           )}
@@ -1168,6 +1186,121 @@ export default function CRMPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Mobile Sidebar Drawer */}
+      {mobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileSidebarOpen(false)} />
+          <div className="relative w-64 bg-[#1a1f2e] flex flex-col h-full shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <LogoCompact />
+              <button onClick={() => setMobileSidebarOpen(false)} className="text-white/60 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+              <button onClick={() => { setView("dashboard"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "dashboard" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                <LayoutDashboard className="w-5 h-5 flex-shrink-0" /><span>Dashboard</span>
+              </button>
+              <button onClick={() => { setView("leads"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "leads" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                <Users className="w-5 h-5 flex-shrink-0" /><span>Leads</span>
+              </button>
+              {(user?.role === 'rm' || user?.role === 'gm' || isAdmin) && (
+                <button onClick={() => { setView("partners"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "partners" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                  <Users2 className="w-5 h-5 flex-shrink-0" /><span>Partners</span>
+                </button>
+              )}
+              <button onClick={() => { setView("properties"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "properties" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                <Home className="w-5 h-5 flex-shrink-0" /><span>Properties</span>
+              </button>
+              <button onClick={() => { setView("projects"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "projects" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                <Building2 className="w-5 h-5 flex-shrink-0" /><span>Projects</span>
+              </button>
+              <button onClick={() => { setView("reports"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "reports" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                <BarChart3 className="w-5 h-5 flex-shrink-0" /><span>Reports</span>
+              </button>
+              <button onClick={() => { setView("data"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "data" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                <Database className="w-5 h-5 flex-shrink-0" /><span>Data</span>
+              </button>
+              {isAdmin && (
+                <>
+                  <button onClick={() => { setView("blog"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "blog" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                    <BookOpen className="w-5 h-5 flex-shrink-0" /><span>Blog</span>
+                  </button>
+                  <button onClick={() => { setView("team"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "team" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                    <Users className="w-5 h-5 flex-shrink-0" /><span>Team</span>
+                  </button>
+                  <button onClick={() => { setView("clients"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "clients" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                    <User className="w-5 h-5 flex-shrink-0" /><span>Clients</span>
+                  </button>
+                  <button onClick={() => { setView("referrals"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "referrals" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                    <Activity className="w-5 h-5 flex-shrink-0" /><span>Referrals</span>
+                  </button>
+                </>
+              )}
+              <button onClick={() => { setView("map"); setMobileSidebarOpen(false) }} className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${view === "map" ? "bg-[#422D83] text-white" : "text-white/60 hover:text-white hover:bg-white/10"}`}>
+                <MapPin className="w-5 h-5 flex-shrink-0" /><span>Map</span>
+              </button>
+            </nav>
+            <div className="p-3 border-t border-white/10 flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {user?.name?.charAt(0) || "U"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-white truncate">{user?.name}</p>
+                <p className="text-xs text-white/40 capitalize">{user?.role}</p>
+              </div>
+              <button onClick={handleLogout} title="Logout" className="text-white/40 hover:text-red-400">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-[#1a1f2e] border-t border-white/10 flex">
+        <button onClick={() => setView("dashboard")} className={`flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${view === "dashboard" ? "text-[#a78bfa]" : "text-white/50"}`}>
+          <LayoutDashboard className="w-5 h-5" />
+          <span>Home</span>
+        </button>
+        <button onClick={() => setView("leads")} className={`flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${view === "leads" ? "text-[#a78bfa]" : "text-white/50"}`}>
+          <Users className="w-5 h-5" />
+          <span>Leads</span>
+        </button>
+        {(user?.role === 'rm' || user?.role === 'gm' || isAdmin) && (
+          <button onClick={() => setView("partners")} className={`flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${view === "partners" ? "text-[#a78bfa]" : "text-white/50"}`}>
+            <Users2 className="w-5 h-5" />
+            <span>Partners</span>
+          </button>
+        )}
+        <button onClick={() => setView("data")} className={`flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] transition-colors ${view === "data" ? "text-[#a78bfa]" : "text-white/50"}`}>
+          <Database className="w-5 h-5" />
+          <span>Data</span>
+        </button>
+        <button onClick={() => setMobileSidebarOpen(true)} className="flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] text-white/50 hover:text-white/80">
+          <Menu className="w-5 h-5" />
+          <span>More</span>
+        </button>
+      </nav>
+
+      {/* Toast */}
+      {crmToast && (
+        <Toast message={crmToast.message} type={crmToast.type} onClose={() => setCrmToast(null)} />
+      )}
+
+      {/* Delete Confirm Dialog */}
+      {confirmDeleteLead && (
+        <ConfirmDialog
+          title="Delete Lead"
+          message={`This will permanently delete ${confirmDeleteLead.clientName}'s record and all associated data.`}
+          confirmLabel="DELETE"
+          inputLabel='Type "DELETE" to confirm'
+          danger
+          onConfirm={() => confirmAndDeleteLead(confirmDeleteLead)}
+          onCancel={() => setConfirmDeleteLead(null)}
+        />
       )}
     </div>
   )

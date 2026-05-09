@@ -157,11 +157,25 @@ export default function PartnerDashboard() {
         </div>
       )}
 
+      {/* Primary CTA — Refer a Client */}
+      <Link
+        href="/partner/referrals?refer=1"
+        className="flex items-center justify-between bg-violet-600 hover:bg-violet-700 text-white rounded-2xl p-5 transition-colors shadow-md"
+      >
+        <div>
+          <p className="text-base font-bold">Refer a Client</p>
+          <p className="text-sm text-white/70 mt-0.5">Submit a new referral in under 30 seconds</p>
+        </div>
+        <div className="bg-white/20 rounded-full p-2.5">
+          <ArrowRight className="h-5 w-5" />
+        </div>
+      </Link>
+
       {/* Quick links */}
       <div className="grid grid-cols-2 gap-4">
         <Link
           href="/partner/projects"
-          className="bg-violet-600 text-white rounded-xl p-4 text-sm font-medium hover:bg-violet-700 transition-colors flex items-center justify-between"
+          className="bg-white border border-gray-200 text-gray-700 rounded-xl p-4 text-sm font-medium hover:bg-gray-50 transition-colors flex items-center justify-between"
         >
           Browse Projects
           <ArrowRight className="h-4 w-4" />

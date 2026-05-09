@@ -1,6 +1,7 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect } from 'react'
+import { X, AlertTriangle, CheckCircle } from 'lucide-react'
 import { STATUS_COLORS } from '../constants'
 
 export function TagBadge({ tag }: { tag: string }) {
@@ -75,5 +76,88 @@ export function Textarea({ className = "", ...props }: React.TextareaHTMLAttribu
       {...props}
       className={`w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none ${className}`}
     />
+  )
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+
+export function Toast({ message, type = 'default', onClose }: {
+  message: string
+  type?: 'default' | 'success' | 'error'
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3500)
+    return () => clearTimeout(t)
+  }, [onClose])
+
+  const bg = type === 'success' ? 'bg-green-700' : type === 'error' ? 'bg-red-700' : 'bg-gray-900'
+
+  return (
+    <div className={`fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-[60] ${bg} text-white text-sm px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-3 max-w-xs whitespace-nowrap`}>
+      {type === 'success' && <CheckCircle className="w-4 h-4 flex-shrink-0" />}
+      {type === 'error' && <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+      <span className="truncate">{message}</span>
+      <button onClick={onClose} className="text-white/60 hover:text-white ml-1 flex-shrink-0">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
+}
+
+// ─── ConfirmDialog ────────────────────────────────────────────────────────────
+
+export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', inputLabel, danger = false, onConfirm, onCancel }: {
+  title: string
+  message: string
+  confirmLabel?: string
+  inputLabel?: string
+  danger?: boolean
+  onConfirm: (inputValue?: string) => void
+  onCancel: () => void
+}) {
+  const [inputValue, setInputValue] = React.useState('')
+  const needsInput = !!inputLabel
+  const canConfirm = !needsInput || inputValue === confirmLabel
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 space-y-4">
+        <h3 className="text-base font-bold text-gray-900">{title}</h3>
+        <p className="text-sm text-gray-600">{message}</p>
+        {needsInput && (
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">{inputLabel}</label>
+            <input
+              type="text"
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              autoFocus
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+              placeholder={confirmLabel}
+            />
+          </div>
+        )}
+        <div className="flex gap-3 pt-1">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => canConfirm && onConfirm(inputValue)}
+            disabled={!canConfirm}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 ${
+              danger
+                ? 'bg-red-600 hover:bg-red-700 text-white'
+                : 'bg-[#422D83] hover:bg-[#321f6b] text-white'
+            }`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
