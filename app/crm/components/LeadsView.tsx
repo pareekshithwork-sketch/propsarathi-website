@@ -8,20 +8,9 @@ import {
   Activity, TrendingUp, Building2, Filter, Pencil, ChevronRight, ChevronDown, ChevronUp,
   SlidersHorizontal, MapPin, Home, Pin, ArrowUpDown,
 } from 'lucide-react'
+import { V2_STAGE_TABS, V2_SUB_STAGES, v2StageBadge, v2StageLabel } from '@/app/crm/constants'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const STAGE_TABS = [
-  { id: 'All', label: 'All Active' },
-  { id: 'New', label: 'New' },
-  { id: 'Callback', label: 'Callback' },
-  { id: 'Schedule Meeting', label: 'Meeting' },
-  { id: 'Schedule Site Visit', label: 'Site Visit' },
-  { id: 'Expression Of Interest', label: 'EOI' },
-  { id: 'Book', label: 'Booked' },
-  { id: 'Not Interested', label: 'Not Interested' },
-  { id: 'Drop', label: 'Drop' },
-]
 
 const STAGE_ACTIONS = [
   { label: 'Callback', apiStage: 'Callback', color: 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200' },
@@ -32,33 +21,6 @@ const STAGE_ACTIONS = [
   { label: 'Not Interested', apiStage: 'Not Interested', color: 'bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-200' },
   { label: 'Drop', apiStage: 'Drop', color: 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200' },
 ]
-
-const SUB_STAGES: Record<string, string[]> = {
-  'Callback': ['Follow Up', 'Future Prospect/Project', 'Not Reachable', 'Busy', 'To Schedule A Meeting', 'Not Answered', 'Need More Info', 'To Schedule Site Visit', 'Plan Postponed'],
-  'Schedule Meeting': ['On Call', 'In Person', 'Others', 'Online'],
-  'Schedule Site Visit': ['Revisit', 'First Visit'],
-  'Expression Of Interest': ['Given EOI'],
-  'Not Interested': ['Different Location', 'Different Requirements', 'Unmatched Budget'],
-  'Drop': ['Not Enquired', 'Wrong/Invalid No', 'Ringing Not Received', 'Not Looking', 'Purchased From Others'],
-}
-
-const STAGE_BADGE: Record<string, string> = {
-  'New': 'bg-gray-100 text-gray-600',
-  'Callback': 'bg-blue-100 text-blue-700',
-  'Schedule Meeting': 'bg-violet-100 text-violet-700',
-  'Schedule Site Visit': 'bg-cyan-100 text-cyan-700',
-  'Expression Of Interest': 'bg-amber-100 text-amber-700',
-  'Book': 'bg-green-100 text-green-700',
-  'Not Interested': 'bg-orange-100 text-orange-700',
-  'Drop': 'bg-red-100 text-red-700',
-}
-
-const STAGE_LABEL: Record<string, string> = {
-  'Schedule Meeting': 'Meeting',
-  'Schedule Site Visit': 'Site Visit',
-  'Expression Of Interest': 'EOI',
-  'Book': 'Booked',
-}
 
 const TAG_COLORS: Record<string, string> = {
   Hot: 'bg-red-100 text-red-700',
@@ -184,12 +146,12 @@ function timeAgo(dateStr: string | null | undefined): string {
 
 function stageBadgeCls(stage: string | null | undefined): string {
   if (!stage) return 'bg-gray-100 text-gray-500'
-  return STAGE_BADGE[stage] || 'bg-gray-100 text-gray-600'
+  return v2StageBadge(stage)
 }
 
 function stageDisplayLabel(stage: string | null | undefined): string {
   if (!stage) return 'No enquiry'
-  return STAGE_LABEL[stage] || stage
+  return v2StageLabel(stage)
 }
 
 function leadScore(stage: string | null | undefined): { label: string; cls: string } {
@@ -666,7 +628,7 @@ export function LeadsView({ v2Leads, user, onReload, onNavigateToEnquiry, onNavi
             </button>
           </div>
           <div className="flex gap-1 overflow-x-auto flex-1 scrollbar-hide">
-            {STAGE_TABS.map(tab => (
+            {V2_STAGE_TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setStageTab(tab.id)}
@@ -2167,7 +2129,7 @@ function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, on
   const [partnerNoteSaving, setPartnerNoteSaving] = useState(false)
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
-  const subStages = stageForm.stage ? (SUB_STAGES[stageForm.stage] || []) : []
+  const subStages = stageForm.stage ? (V2_SUB_STAGES[stageForm.stage] || []) : []
   const needsSchedule = ['Callback', 'Schedule Meeting', 'Schedule Site Visit'].includes(stageForm.stage)
   const needsLostReason = ['Not Interested', 'Drop'].includes(stageForm.stage)
 
@@ -2668,7 +2630,7 @@ function PanelEnquiryCard({ enq, lead, user, pinned, onTogglePin, onNavigate, on
           {needsLostReason && (
             <select value={stageForm.lostReason} onChange={e => setStageForm(p => ({ ...p, lostReason: e.target.value }))} className={inputCls}>
               <option value="">Select reason…</option>
-              {(SUB_STAGES[stageForm.stage] || []).map(r => <option key={r} value={r}>{r}</option>)}
+              {(V2_SUB_STAGES[stageForm.stage] || []).map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           )}
           <textarea
@@ -3153,7 +3115,7 @@ function EnquiriesTab({ enquiries, leadId, onRefresh, showToast }: {
 
       {enquiries.map((enq: any) => {
         const isChangingStage = stageCardId === enq.enquiry_id
-        const subStages = stageForm.stage ? (SUB_STAGES[stageForm.stage] || []) : []
+        const subStages = stageForm.stage ? (V2_SUB_STAGES[stageForm.stage] || []) : []
         const needsSchedule = ['Callback', 'Schedule Meeting', 'Schedule Site Visit'].includes(stageForm.stage)
         const needsLostReason = ['Not Interested', 'Drop'].includes(stageForm.stage)
 
@@ -3262,7 +3224,7 @@ function EnquiriesTab({ enquiries, leadId, onRefresh, showToast }: {
                     className={inputCls}
                   >
                     <option value="">Select reason…</option>
-                    {(SUB_STAGES[stageForm.stage] || []).map(r => <option key={r} value={r}>{r}</option>)}
+                    {(V2_SUB_STAGES[stageForm.stage] || []).map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 )}
 
@@ -3355,7 +3317,7 @@ function EnquiriesTab({ enquiries, leadId, onRefresh, showToast }: {
 // ─── Status Tab ───────────────────────────────────────────────────────────────
 
 function StatusTab({ activeEnquiry, activeStageAction, setActiveStageAction, subStage, setSubStage, stageNotes, setStageNotes, stageScheduledAt, setStageScheduledAt, stageLostReason, setStageLostReason, bookingName, setBookingName, bookingDate, setBookingDate, agreementValue, setAgreementValue, savingStage, onSave }: any) {
-  const subStages = activeStageAction ? (SUB_STAGES[activeStageAction] || []) : []
+  const subStages = activeStageAction ? (V2_SUB_STAGES[activeStageAction] || []) : []
   const needsSchedule = ['Callback', 'Schedule Meeting', 'Schedule Site Visit'].includes(activeStageAction)
   const needsLostReason = ['Not Interested', 'Drop'].includes(activeStageAction)
   const isBooking = activeStageAction === 'Book'
@@ -3446,7 +3408,7 @@ function StatusTab({ activeEnquiry, activeStageAction, setActiveStageAction, sub
                 className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#422D83]/40"
               >
                 <option value="">Select reason…</option>
-                {(SUB_STAGES[activeStageAction] || []).map(r => <option key={r} value={r}>{r}</option>)}
+                {(V2_SUB_STAGES[activeStageAction] || []).map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
           )}

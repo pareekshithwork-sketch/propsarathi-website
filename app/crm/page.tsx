@@ -10,9 +10,9 @@ import {
 } from "lucide-react"
 import MapEditor from "@/components/MapEditor"
 import { LogoCompact } from "@/components/Logo"
-import type { Lead, DataRecord, HistoryEntry, CRMUser } from './types'
+import type { Lead, DataRecord, CRMUser } from './types'
 import { EMPTY_LEAD_FORM, SOURCE_OPTIONS } from './constants'
-import { FormField, Input, Select, Textarea, Toast, ConfirmDialog } from './components/shared'
+import { FormField, Input, Select, Textarea, Toast } from './components/shared'
 import { DashboardView } from './components/DashboardView'
 import { LeadsView } from './components/LeadsView'
 import { LeadModal } from './components/LeadModal'
@@ -49,26 +49,10 @@ export default function CRMPage() {
   const [search, setSearch] = useState("")
 
   // ── Data ──
-  const [leads, setLeads] = useState<Lead[]>([])
   const [dataRecords, setDataRecords] = useState<DataRecord[]>([])
   const [crmProjects, setCrmProjects] = useState<any[]>([])
   const [projectsLoading, setProjectsLoading] = useState(false)
   const [loading, setLoading] = useState(false)
-
-  // ── Lead detail ──
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
-  const [leadHistory, setLeadHistory] = useState<HistoryEntry[]>([])
-  const [detailTab, setDetailTab] = useState<"overview" | "status" | "history" | "notes" | "document">("overview")
-  const [leadFilter, setLeadFilter] = useState("All")
-  const [activeLeadTab, setActiveLeadTab] = useState("All")
-
-  // ── Status action ──
-  const [showStatusAction, setShowStatusAction] = useState<{ action: string; sub?: string } | null>(null)
-  const [selectedSubStatus, setSelectedSubStatus] = useState("")
-  const [statusNote, setStatusNote] = useState("")
-  const [statusSchedule, setStatusSchedule] = useState("")
-  const [bookingForm, setBookingForm] = useState({ bookedName: "", bookedDate: "", agreementValue: "", property: "" })
-  const [savingStatus, setSavingStatus] = useState(false)
 
   // ── Add/Edit Lead modal ──
   const [showAddLead, setShowAddLead] = useState(false)
@@ -91,10 +75,6 @@ export default function CRMPage() {
   const [dataFilter, setDataFilter] = useState("All")
   const [dataSearch, setDataSearch] = useState("")
 
-  // ── Notes ──
-  const [addNoteText, setAddNoteText] = useState("")
-  const [savingNote, setSavingNote] = useState(false)
-
   // ── Bulk import ──
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [bulkImportType, setBulkImportType] = useState<'leads' | 'data'>('leads')
@@ -106,7 +86,6 @@ export default function CRMPage() {
   // ── Mobile + UX ──
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [crmToast, setCrmToast] = useState<{ message: string; type?: 'default' | 'success' | 'error' } | null>(null)
-  const [confirmDeleteLead, setConfirmDeleteLead] = useState<Lead | null>(null)
 
   function showToast(message: string, type: 'default' | 'success' | 'error' = 'default') {
     setCrmToast({ message, type })
@@ -223,113 +202,6 @@ export default function CRMPage() {
     await fetch("/api/crm/auth/logout", { method: "POST", credentials: "include" })
     setUser(null)
     setAuthState("login")
-  }
-
-  // ── Lead selection ──
-  async function selectLead(lead: Lead | null) {
-    if (!lead) { setSelectedLead(null); return }
-    setSelectedLead(lead)
-    setDetailTab("overview")
-    setShowStatusAction(null)
-    try {
-      const res = await fetch(`/api/crm/leads/${lead.leadId}`, { credentials: "include" })
-      const d = await res.json()
-      if (d.success) {
-        setSelectedLead(d.lead)
-        setLeadHistory(d.history || [])
-      }
-    } catch {}
-  }
-
-  // ── Status action ──
-  async function saveStatusAction(goNext = false) {
-    if (!selectedLead || !showStatusAction) return
-    setSavingStatus(true)
-    try {
-      const body: any = {
-        status: showStatusAction.action,
-        subStatus: selectedSubStatus,
-        notes: statusNote,
-        action: `Status set to ${showStatusAction.action}`,
-      }
-      if (showStatusAction.action === "Callback" || showStatusAction.action === "Meeting" || showStatusAction.action === "Site Visit") {
-        body.scheduledAt = statusSchedule
-      }
-      if (showStatusAction.action === "Booked") {
-        body.bookedName = bookingForm.bookedName
-        body.bookedDate = bookingForm.bookedDate
-        body.agreementValue = bookingForm.agreementValue
-        body.projectEnquired = bookingForm.property
-      }
-      if (statusNote) body.lastNote = statusNote
-
-      await fetch(`/api/crm/leads/${selectedLead.leadId}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-
-      // Update local state
-      const updated = { ...selectedLead, status: showStatusAction.action, subStatus: selectedSubStatus, lastNote: statusNote, scheduledAt: statusSchedule }
-      setSelectedLead(updated)
-      setLeads(prev => prev.map(l => l.leadId === updated.leadId ? updated : l))
-
-      setShowStatusAction(null)
-      setSelectedSubStatus("")
-      setStatusNote("")
-      setStatusSchedule("")
-      setBookingForm({ bookedName: "", bookedDate: "", agreementValue: "", property: "" })
-
-      if (goNext) {
-        const idx = filteredLeads.findIndex(l => l.leadId === selectedLead.leadId)
-        if (idx >= 0 && idx < filteredLeads.length - 1) {
-          selectLead(filteredLeads[idx + 1])
-        }
-      }
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setSavingStatus(false)
-    }
-  }
-
-  async function saveNote() {
-    if (!selectedLead || !addNoteText.trim()) return
-    setSavingNote(true)
-    try {
-      await fetch(`/api/crm/leads/${selectedLead.leadId}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastNote: addNoteText }),
-      })
-      const updated = { ...selectedLead, lastNote: addNoteText }
-      setSelectedLead(updated)
-      setLeads(prev => prev.map(l => l.leadId === updated.leadId ? updated : l))
-      setAddNoteText("")
-      // Refresh history
-      const res = await fetch(`/api/crm/leads/${selectedLead.leadId}`, { credentials: "include" })
-      const d = await res.json()
-      if (d.success) setLeadHistory(d.history || [])
-    } catch {}
-    setSavingNote(false)
-  }
-
-  function deleteLead(lead: Lead) {
-    if (!isAdmin) {
-      showToast('Only admins can delete leads.', 'error')
-      return
-    }
-    setConfirmDeleteLead(lead)
-  }
-
-  async function confirmAndDeleteLead(lead: Lead) {
-    setConfirmDeleteLead(null)
-    await fetch(`/api/crm/leads/${lead.leadId}`, { method: "DELETE", credentials: "include" })
-    setLeads(prev => prev.filter(l => l.leadId !== lead.leadId))
-    if (selectedLead?.leadId === lead.leadId) setSelectedLead(null)
-    showToast('Lead deleted.', 'default')
   }
 
   // ── Add/Edit Lead ──
@@ -468,40 +340,6 @@ export default function CRMPage() {
     } catch {}
     setSavingData(false)
   }
-
-  // ── Filtered leads ──
-  const filteredLeads = useMemo(() => {
-    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-    return leads.filter(l => {
-      if (l.isDeleted && leadFilter !== "Deleted") return false
-
-      if (activeLeadTab === "New" && l.status !== "New") return false
-      if (activeLeadTab === "Pending" && l.status !== "Callback") return false
-      if (activeLeadTab === "Scheduled" && !["Meeting", "Site Visit"].includes(l.status)) return false
-      if (activeLeadTab === "Overdue") {
-        if (!["Callback", "Meeting", "Site Visit"].includes(l.status)) return false
-        if (l.lastUpdated && new Date(l.lastUpdated) >= twoDaysAgo) return false
-      }
-      if (activeLeadTab === "EOI" && l.status !== "Expression of Interest") return false
-      if (activeLeadTab === "Booked" && l.status !== "Booked") return false
-
-      if (leadFilter === "My Leads" && l.assignedRM !== user?.name) return false
-      if (leadFilter === "Unassigned" && l.assignedRM) return false
-      if (leadFilter === "Duplicate" && !l.isDuplicate) return false
-      if (leadFilter === "Deleted" && !l.isDeleted) return false
-
-      if (search) {
-        const q = search.toLowerCase()
-        return (
-          l.clientName?.toLowerCase().includes(q) ||
-          l.phone?.includes(q) ||
-          l.email?.toLowerCase().includes(q) ||
-          l.source?.toLowerCase().includes(q)
-        )
-      }
-      return true
-    })
-  }, [leads, activeLeadTab, leadFilter, search, user])
 
   const filteredData = useMemo(() => {
     return dataRecords.filter(d => {
@@ -1290,18 +1128,6 @@ export default function CRMPage() {
         <Toast message={crmToast.message} type={crmToast.type} onClose={() => setCrmToast(null)} />
       )}
 
-      {/* Delete Confirm Dialog */}
-      {confirmDeleteLead && (
-        <ConfirmDialog
-          title="Delete Lead"
-          message={`This will permanently delete ${confirmDeleteLead.clientName}'s record and all associated data.`}
-          confirmLabel="DELETE"
-          inputLabel='Type "DELETE" to confirm'
-          danger
-          onConfirm={() => confirmAndDeleteLead(confirmDeleteLead)}
-          onCancel={() => setConfirmDeleteLead(null)}
-        />
-      )}
     </div>
   )
 }

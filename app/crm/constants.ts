@@ -110,35 +110,35 @@ export const V2_SUB_STAGES: Record<string, string[]> = {
 }
 
 export const V2_STAGE_BADGE: Record<string, string> = {
-  New:                    'bg-blue-100 text-blue-700 border-blue-200',
-  Callback:               'bg-amber-100 text-amber-700 border-amber-200',
-  'Schedule Meeting':     'bg-indigo-100 text-indigo-700 border-indigo-200',
-  'Schedule Site Visit':  'bg-purple-100 text-purple-700 border-purple-200',
-  'Expression Of Interest': 'bg-orange-100 text-orange-700 border-orange-200',
-  Book:                   'bg-[#ede9f8] text-[#371f6e] border-[#c4b8ef]',
-  'Not Interested':       'bg-gray-100 text-gray-600 border-gray-200',
+  New:                    'bg-gray-100 text-gray-600 border-gray-200',
+  Callback:               'bg-blue-100 text-blue-700 border-blue-200',
+  'Schedule Meeting':     'bg-violet-100 text-violet-700 border-violet-200',
+  'Schedule Site Visit':  'bg-cyan-100 text-cyan-700 border-cyan-200',
+  'Expression Of Interest': 'bg-amber-100 text-amber-700 border-amber-200',
+  Book:                   'bg-green-100 text-green-700 border-green-200',
+  'Not Interested':       'bg-orange-100 text-orange-700 border-orange-200',
   Drop:                   'bg-red-100 text-red-700 border-red-200',
 }
 
 export const V2_STAGE_DOT: Record<string, string> = {
-  New:                    'bg-blue-500',
-  Callback:               'bg-amber-500',
-  'Schedule Meeting':     'bg-indigo-500',
-  'Schedule Site Visit':  'bg-purple-500',
-  'Expression Of Interest': 'bg-orange-500',
-  Book:                   'bg-violet-700',
-  'Not Interested':       'bg-gray-400',
+  New:                    'bg-gray-400',
+  Callback:               'bg-blue-500',
+  'Schedule Meeting':     'bg-violet-500',
+  'Schedule Site Visit':  'bg-cyan-500',
+  'Expression Of Interest': 'bg-amber-500',
+  Book:                   'bg-green-500',
+  'Not Interested':       'bg-orange-400',
   Drop:                   'bg-red-500',
 }
 
 export const V2_STAGE_COL_COLORS: Record<string, string> = {
-  New:                    'border-t-blue-400',
-  Callback:               'border-t-amber-400',
-  'Schedule Meeting':     'border-t-indigo-400',
-  'Schedule Site Visit':  'border-t-purple-400',
-  'Expression Of Interest': 'border-t-orange-400',
-  Book:                   'border-t-violet-600',
-  'Not Interested':       'border-t-gray-300',
+  New:                    'border-t-gray-400',
+  Callback:               'border-t-blue-400',
+  'Schedule Meeting':     'border-t-violet-400',
+  'Schedule Site Visit':  'border-t-cyan-400',
+  'Expression Of Interest': 'border-t-amber-400',
+  Book:                   'border-t-green-400',
+  'Not Interested':       'border-t-orange-300',
   Drop:                   'border-t-red-400',
 }
 
