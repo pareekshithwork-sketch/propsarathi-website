@@ -12,9 +12,8 @@ export async function getAutoAssignRM(): Promise<string> {
   try {
     const rows = await sql`
       SELECT assigned_rm, COUNT(*) as open_count
-      FROM crm_leads
+      FROM crm_leads_v2
       WHERE is_deleted = FALSE
-        AND status NOT IN ('Booked', 'Dropped', 'Not Interested')
         AND assigned_rm = ANY(${RM_NAMES})
       GROUP BY assigned_rm
     `

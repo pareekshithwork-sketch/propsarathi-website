@@ -51,7 +51,6 @@ export default function CRMPage() {
   // ── Data ──
   const [leads, setLeads] = useState<Lead[]>([])
   const [dataRecords, setDataRecords] = useState<DataRecord[]>([])
-  const [stats, setStats] = useState<any>(null)
   const [crmProjects, setCrmProjects] = useState<any[]>([])
   const [projectsLoading, setProjectsLoading] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -157,23 +156,17 @@ export default function CRMPage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [leadsRes, dataRes, statsRes, v2Res, dashRes] = await Promise.allSettled([
-        fetch("/api/crm/leads", { credentials: "include" }),
+      const [dataRes, v2Res, dashRes] = await Promise.allSettled([
         fetch("/api/crm/data", { credentials: "include" }),
-        fetch("/api/crm/stats", { credentials: "include" }),
         fetch("/api/crm/v2/leads?limit=200", { credentials: "include" }),
         fetch("/api/crm/v2/dashboard", { credentials: "include" }),
       ])
-      const [ld, dd, sd, v2d, dashd]: any[] = await Promise.all([
-        leadsRes.status === 'fulfilled' ? leadsRes.value.json() : {},
+      const [dd, v2d, dashd]: any[] = await Promise.all([
         dataRes.status === 'fulfilled' ? dataRes.value.json() : {},
-        statsRes.status === 'fulfilled' ? statsRes.value.json() : {},
         v2Res.status === 'fulfilled' ? v2Res.value.json() : {},
         dashRes.status === 'fulfilled' ? dashRes.value.json() : {},
       ])
-      if (ld.success) setLeads(ld.leads || [])
       if (dd.success) setDataRecords(dd.records || [])
-      if (sd.success) setStats(sd.stats)
       if (v2d.leads) setV2Leads(v2d.leads)
       if (dashd.success) setV2Dashboard(dashd)
     } catch (e) {
@@ -345,29 +338,56 @@ export default function CRMPage() {
     if (!leadForm.clientName || !leadForm.phone) return
     setSavingLead(true)
     try {
+      const v2Body = {
+        name: leadForm.clientName,
+        phone: leadForm.phone,
+        alternatePhone: leadForm.altPhone || '',
+        countryCode: leadForm.countryCode || '+91',
+        email: leadForm.email || '',
+        source: leadForm.source || 'Direct',
+        subSource: leadForm.subSource || '',
+        referralName: leadForm.referralName || '',
+        referralPhone: leadForm.referralPhone || '',
+        customerLocation: leadForm.city || '',
+        assignedRm: leadForm.assignedRM || '',
+        leadType: (leadForm as any).leadType || 'Buyer',
+        tags: leadForm.tags || '',
+      }
+
       if (editingLead) {
-        await fetch(`/api/crm/leads/${editingLead.leadId}`, {
-          method: "PUT",
+        // editingLead.lead_id exists if it's a v2 lead
+        const leadId = (editingLead as any).lead_id || editingLead.leadId
+        await fetch(`/api/crm/v2/leads/${leadId}`, {
+          method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(leadForm),
+          body: JSON.stringify(v2Body),
         })
-        setLeads(prev => prev.map(l => l.leadId === editingLead.leadId ? { ...l, ...leadForm } as Lead : l))
-        if (selectedLead?.leadId === editingLead.leadId) setSelectedLead({ ...selectedLead, ...leadForm } as Lead)
       } else {
-        const res = await fetch("/api/crm/leads", {
+        const res = await fetch("/api/crm/v2/leads", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(leadForm),
+          body: JSON.stringify(v2Body),
         })
         const d = await res.json()
-        if (d.success) {
-          const newLead: Lead = { ...EMPTY_LEAD_FORM, ...leadForm, leadId: d.leadId, createdAt: new Date().toLocaleString("en-IN"), lastUpdated: new Date().toLocaleString("en-IN"), isDeleted: false, isDuplicate: false } as Lead
-          setLeads(prev => [newLead, ...prev])
+        if (!d.success && !d.duplicate) {
+          alert(d.error || "Failed to save lead. Please try again.")
+          setSavingLead(false)
+          return
+        }
+        // Log initial notes if provided
+        if (d.success && leadForm.notes && d.leadId) {
+          fetch("/api/crm/v2/activity/log", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ leadId: d.leadId, activityType: 'note_added', description: leadForm.notes }),
+          }).catch(() => {})
         }
       }
       setShowAddLead(false)
+      loadAll()
     } catch (e) {
       console.error("saveLead error:", e)
       alert("Failed to save lead. Please try again.")
@@ -876,7 +896,7 @@ export default function CRMPage() {
         {/* Content */}
         <div className="flex-1 overflow-hidden">
           {view === "dashboard" && (
-            <DashboardView stats={stats} loading={loading} leads={leads} onNavigate={setView} v2Dashboard={v2Dashboard} user={user} />
+            <DashboardView loading={loading} onNavigate={setView} v2Dashboard={v2Dashboard} user={user} />
           )}
           {view === "leads" && (
             <LeadsView

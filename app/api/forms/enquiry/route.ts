@@ -16,9 +16,8 @@ export async function POST(req: NextRequest) {
     }
 
     const ts = new Date().toISOString()
-    const leadId = `LEAD-${Date.now()}`
     const leadSource = source || (propertySlug ? 'Property Enquiry' : 'Website')
-    const notes = [
+    const activityNote = [
       propertySlug ? `Property: ${propertySlug}` : '',
       shareCode ? `Referred via: ${shareCode}` : '',
       message || '',
@@ -38,64 +37,64 @@ export async function POST(req: NextRequest) {
           referrerType = link.sharer_type
           referrerId = link.sharer_id
           if (!resolvedRmId && link.rm_id) resolvedRmId = link.rm_id
-          // Increment leads_count
           await sql`UPDATE share_links SET leads_count = leads_count + 1 WHERE code = ${shareCode}`
         }
       } catch { /* non-fatal */ }
     }
 
-    // Auto-assign to RM with fewest open leads (unless overridden by referral chain)
+    // Auto-assign to RM with fewest open leads
     const assignedRM = await getAutoAssignRM()
 
-    // Write to CRM DB leads table (primary)
-    let newLeadId: number | null = null
+    // Insert into crm_leads_v2 (primary store)
+    let newLead: { id: number; lead_id: string } | null = null
     try {
       const [inserted] = await sql`
-        INSERT INTO crm_leads (
-          lead_id, source, client_name, phone, email, notes, last_note, status, assigned_rm,
-          project, share_code, referrer_type, referrer_id, rm_override, created_at, last_updated
+        INSERT INTO crm_leads_v2 (
+          name, phone, email, source, sub_source,
+          assigned_rm, lead_type, created_by
         ) VALUES (
-          ${leadId}, ${leadSource}, ${name}, ${phone}, ${email || ''},
-          ${notes}, ${notes}, 'New', ${assignedRM},
-          ${propertySlug || ''}, ${shareCode || null}, ${referrerType}, ${referrerId}, ${resolvedRmId},
-          NOW(), NOW()
+          ${name}, ${phone}, ${email || ''}, ${leadSource},
+          ${propertySlug || ''},
+          ${assignedRM}, 'Buyer', 'website'
         )
-        RETURNING id
+        RETURNING id, lead_id
       `
-      newLeadId = inserted?.id ?? null
+      newLead = (inserted as any) ?? null
     } catch (dbErr) {
       console.error('[Enquiry] DB insert failed:', dbErr)
     }
 
+    // Log notes to activity log (non-fatal)
+    if (newLead && activityNote) {
+      await sql`
+        INSERT INTO crm_activity_log (lead_id, activity_type, description, created_by)
+        VALUES (${newLead.lead_id}, 'lead_created', ${activityNote}, 'website')
+      `.catch(() => {})
+    }
+
     // Write to Google Sheets (non-fatal secondary)
-    try {
-      await appendToSheet('Leads', [[
-        leadId, '', ts, '', '', name, '', phone,
-        email || '', '', '', 'New', assignedRM, notes, ts, '', '',
-      ]])
-    } catch (sheetsErr) {
-      console.error('[Enquiry] Sheets write failed (non-fatal):', sheetsErr)
-    }
+    await appendToSheet('Leads', [[
+      newLead?.lead_id ?? '', '', ts, '', '', name, '', phone,
+      email || '', '', '', 'New', assignedRM, activityNote, ts, '', '',
+    ]]).catch(err => console.error('[Enquiry] Sheets write failed (non-fatal):', err))
 
-    // Record referral chain
-    if (newLeadId && shareCode && referrerType) {
-      try {
+    // Record referral chain (uses serial integer id as FK)
+    if (newLead && shareCode && referrerType) {
+      await sql`
+        INSERT INTO referral_chain (lead_id, share_code, sharer_type, sharer_id, rm_id)
+        VALUES (${newLead.id}, ${shareCode}, ${referrerType}, ${referrerId}, ${resolvedRmId})
+      `.catch(() => {})
+
+      if (referrerType === 'affiliate' && referrerId) {
         await sql`
-          INSERT INTO referral_chain (lead_id, share_code, sharer_type, sharer_id, rm_id)
-          VALUES (${newLeadId}, ${shareCode}, ${referrerType}, ${referrerId}, ${resolvedRmId})
-        `
-        // If affiliate referral, create commission record
-        if (referrerType === 'affiliate' && referrerId) {
-          await sql`
-            INSERT INTO affiliate_commissions (affiliate_id, lead_id, status, created_at)
-            VALUES (${referrerId}, ${newLeadId}, 'pending', NOW())
-            ON CONFLICT DO NOTHING
-          `
-        }
-      } catch { /* non-fatal */ }
+          INSERT INTO affiliate_commissions (affiliate_id, lead_id, status, created_at)
+          VALUES (${referrerId}, ${newLead.id}, 'pending', NOW())
+          ON CONFLICT DO NOTHING
+        `.catch(() => {})
+      }
     }
 
-    // If user is logged in, also log to client_enquiries
+    // If user is logged in, log to client_enquiries
     try {
       const session = await getClientSession()
       if (session) {
@@ -120,7 +119,7 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
-    return NextResponse.json({ success: true, leadId })
+    return NextResponse.json({ success: true, leadId: newLead?.lead_id })
   } catch (e) {
     console.error('[Enquiry]', e)
     return NextResponse.json({ error: 'Failed to submit enquiry' }, { status: 500 })

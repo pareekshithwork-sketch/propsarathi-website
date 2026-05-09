@@ -24,12 +24,14 @@ interface Listing {
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  New: 'bg-blue-100 text-blue-700',
-  Contacted: 'bg-yellow-100 text-yellow-700',
-  'Site Visit': 'bg-purple-100 text-purple-700',
-  Negotiation: 'bg-orange-100 text-orange-700',
-  Book: 'bg-green-100 text-green-700',
-  Lost: 'bg-red-100 text-red-700',
+  New:                    'bg-blue-100 text-blue-700',
+  Callback:               'bg-amber-100 text-amber-700',
+  'Schedule Meeting':     'bg-indigo-100 text-indigo-700',
+  'Schedule Site Visit':  'bg-purple-100 text-purple-700',
+  'Expression Of Interest': 'bg-orange-100 text-orange-700',
+  Book:                   'bg-violet-100 text-violet-700',
+  'Not Interested':       'bg-gray-100 text-gray-600',
+  Drop:                   'bg-red-100 text-red-700',
 }
 
 function formatDate(s: string) {

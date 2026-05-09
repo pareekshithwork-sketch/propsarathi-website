@@ -85,3 +85,84 @@ export const EMPTY_PROJECT_FORM = {
 export const PROJECT_STATUS_OPTIONS = ['Pre-Launch', 'Just Launched', 'Under Construction', 'Ready to Move']
 export const PROJECT_TYPE_OPTIONS = ['Apartment', 'Villa', 'Plots', 'Farmland', 'Townhouse', 'Villament', 'Commercial']
 export const CITY_OPTIONS = ['Bangalore', 'Dubai']
+
+// ─── V2 canonical stage system (crm_enquiries.stage values) ──────────────────
+
+export const V2_STAGE_TABS = [
+  { id: 'All',                    label: 'All Active' },
+  { id: 'New',                    label: 'New' },
+  { id: 'Callback',               label: 'Callback' },
+  { id: 'Schedule Meeting',       label: 'Meeting' },
+  { id: 'Schedule Site Visit',    label: 'Site Visit' },
+  { id: 'Expression Of Interest', label: 'EOI' },
+  { id: 'Book',                   label: 'Booked' },
+  { id: 'Not Interested',         label: 'Not Int.' },
+  { id: 'Drop',                   label: 'Drop' },
+]
+
+export const V2_SUB_STAGES: Record<string, string[]> = {
+  Callback:               CALLBACK_SUBS,
+  'Schedule Meeting':     MEETING_SUBS,
+  'Schedule Site Visit':  SITE_VISIT_SUBS,
+  'Expression Of Interest': EOI_SUBS,
+  'Not Interested':       NOT_INTERESTED_SUBS,
+  Drop:                   DROP_SUBS,
+}
+
+export const V2_STAGE_BADGE: Record<string, string> = {
+  New:                    'bg-blue-100 text-blue-700 border-blue-200',
+  Callback:               'bg-amber-100 text-amber-700 border-amber-200',
+  'Schedule Meeting':     'bg-indigo-100 text-indigo-700 border-indigo-200',
+  'Schedule Site Visit':  'bg-purple-100 text-purple-700 border-purple-200',
+  'Expression Of Interest': 'bg-orange-100 text-orange-700 border-orange-200',
+  Book:                   'bg-[#ede9f8] text-[#371f6e] border-[#c4b8ef]',
+  'Not Interested':       'bg-gray-100 text-gray-600 border-gray-200',
+  Drop:                   'bg-red-100 text-red-700 border-red-200',
+}
+
+export const V2_STAGE_DOT: Record<string, string> = {
+  New:                    'bg-blue-500',
+  Callback:               'bg-amber-500',
+  'Schedule Meeting':     'bg-indigo-500',
+  'Schedule Site Visit':  'bg-purple-500',
+  'Expression Of Interest': 'bg-orange-500',
+  Book:                   'bg-violet-700',
+  'Not Interested':       'bg-gray-400',
+  Drop:                   'bg-red-500',
+}
+
+export const V2_STAGE_COL_COLORS: Record<string, string> = {
+  New:                    'border-t-blue-400',
+  Callback:               'border-t-amber-400',
+  'Schedule Meeting':     'border-t-indigo-400',
+  'Schedule Site Visit':  'border-t-purple-400',
+  'Expression Of Interest': 'border-t-orange-400',
+  Book:                   'border-t-violet-600',
+  'Not Interested':       'border-t-gray-300',
+  Drop:                   'border-t-red-400',
+}
+
+export const V2_STAGE_LABEL: Record<string, string> = {
+  New:                    'New',
+  Callback:               'Callback',
+  'Schedule Meeting':     'Meeting',
+  'Schedule Site Visit':  'Site Visit',
+  'Expression Of Interest': 'Expression of Interest',
+  Book:                   'Booked',
+  'Not Interested':       'Not Interested',
+  Drop:                   'Dropped',
+}
+
+export const V2_ACTIVE_STAGES = ['New', 'Callback', 'Schedule Meeting', 'Schedule Site Visit', 'Expression Of Interest']
+export const V2_CLOSED_STAGES = ['Book', 'Not Interested', 'Drop']
+export const V2_ALL_STAGES = [...V2_ACTIVE_STAGES, ...V2_CLOSED_STAGES]
+
+export function v2StageLabel(stage: string | null | undefined): string {
+  if (!stage) return 'New'
+  return V2_STAGE_LABEL[stage] ?? stage
+}
+
+export function v2StageBadge(stage: string | null | undefined): string {
+  const s = stage ?? 'New'
+  return V2_STAGE_BADGE[s] ?? 'bg-gray-100 text-gray-600 border-gray-200'
+}

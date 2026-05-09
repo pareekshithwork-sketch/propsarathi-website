@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       sql`
         SELECT
           e.enquiry_id, e.stage, e.sub_stage, e.scheduled_at, e.lead_id,
-          l.name AS lead_name, l.phone AS lead_phone, l.assigned_rm
+          l.name AS lead_name, l.phone AS lead_phone, l.country_code AS lead_country_code, l.assigned_rm
         FROM crm_enquiries e
         JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
         WHERE e.scheduled_at < NOW()
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       sql`
         SELECT
           e.enquiry_id, e.stage, e.sub_stage, e.scheduled_at, e.lead_id,
-          l.name AS lead_name, l.phone AS lead_phone, l.assigned_rm
+          l.name AS lead_name, l.phone AS lead_phone, l.country_code AS lead_country_code, l.assigned_rm
         FROM crm_enquiries e
         JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
         WHERE DATE(e.scheduled_at) = CURRENT_DATE
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       sql`
         SELECT
           e.enquiry_id, e.stage, e.sub_stage, e.scheduled_at, e.lead_id,
-          l.name AS lead_name, l.phone AS lead_phone, l.assigned_rm
+          l.name AS lead_name, l.phone AS lead_phone, l.country_code AS lead_country_code, l.assigned_rm
         FROM crm_enquiries e
         JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
         WHERE e.stage = 'Schedule Site Visit'
@@ -62,13 +62,18 @@ export async function GET(request: NextRequest) {
         LIMIT 10
       `,
 
-      // Stats
+      // Stats (scope-aware)
       sql`
         SELECT
           (SELECT COUNT(*) FROM crm_leads_v2 l
            WHERE l.is_deleted = FALSE
              ${lScope}
           ) AS total_leads,
+          (SELECT COUNT(*) FROM crm_leads_v2 l
+           WHERE l.is_deleted = FALSE
+             AND (l.assigned_rm IS NULL OR l.assigned_rm = '')
+             ${lScope}
+          ) AS unassigned_leads,
           (SELECT COUNT(*) FROM crm_enquiries e
            JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
            WHERE e.status = 'active'
@@ -123,6 +128,48 @@ export async function GET(request: NextRequest) {
         ORDER BY pal.created_at DESC
         LIMIT 5
       `,
+
+      // Pipeline stage counts from active enquiries (scope-aware)
+      sql`
+        SELECT e.stage, COUNT(*)::int AS count
+        FROM crm_enquiries e
+        JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
+        WHERE e.status = 'active'
+          AND l.is_deleted = FALSE
+          ${eScope}
+        GROUP BY e.stage
+      `,
+
+      // Source breakdown from leads (scope-aware)
+      sql`
+        SELECT source, COUNT(*)::int AS count
+        FROM crm_leads_v2 l
+        WHERE l.is_deleted = FALSE
+          ${lScope}
+        GROUP BY source
+        ORDER BY count DESC
+        LIMIT 20
+      `,
+
+      // RM breakdown — lead count + booked this month per RM
+      sql`
+        SELECT
+          l.assigned_rm AS name,
+          COUNT(DISTINCT l.lead_id)::int AS total,
+          COUNT(DISTINCT CASE WHEN e.stage = 'New' AND e.status = 'active' THEN e.enquiry_id END)::int AS new_count,
+          COUNT(DISTINCT CASE WHEN e.stage = 'Callback' AND e.status = 'active' THEN e.enquiry_id END)::int AS callbacks,
+          COUNT(DISTINCT CASE WHEN e.stage = 'Schedule Meeting' AND e.status = 'active' THEN e.enquiry_id END)::int AS meetings,
+          COUNT(DISTINCT CASE WHEN e.stage = 'Schedule Site Visit' AND e.status = 'active' THEN e.enquiry_id END)::int AS site_visits,
+          COUNT(DISTINCT CASE WHEN e.stage = 'Expression Of Interest' AND e.status = 'active' THEN e.enquiry_id END)::int AS eoi,
+          COUNT(DISTINCT CASE WHEN e.stage = 'Book' AND DATE_TRUNC('month', e.updated_at) = DATE_TRUNC('month', NOW()) THEN e.enquiry_id END)::int AS booked
+        FROM crm_leads_v2 l
+        LEFT JOIN crm_enquiries e ON e.lead_id = l.lead_id
+        WHERE l.is_deleted = FALSE
+          AND l.assigned_rm IS NOT NULL AND l.assigned_rm != ''
+          ${lScope}
+        GROUP BY l.assigned_rm
+        ORDER BY total DESC
+      `,
     ])
 
     const overdueEnquiries = results[0].status === 'fulfilled' ? results[0].value : []
@@ -131,8 +178,16 @@ export async function GET(request: NextRequest) {
     const statsRows = results[3].status === 'fulfilled' ? results[3].value : []
     const recentActivity = results[4].status === 'fulfilled' ? results[4].value : []
     const partnerActivity = results[5].status === 'fulfilled' ? results[5].value : []
+    const pipelineRows = results[6].status === 'fulfilled' ? results[6].value : []
+    const sourceRows = results[7].status === 'fulfilled' ? results[7].value : []
+    const byRMRows = results[8].status === 'fulfilled' ? results[8].value : []
 
     const s = statsRows[0] || {}
+
+    // Build pipeline stage map
+    const pipelineStats: Record<string, number> = {}
+    for (const r of pipelineRows) pipelineStats[r.stage] = r.count
+
     return NextResponse.json({
       success: true,
       overdueEnquiries,
@@ -140,10 +195,14 @@ export async function GET(request: NextRequest) {
       siteVisitsToday,
       myStats: {
         totalLeads: Number(s.total_leads ?? 0),
+        unassignedLeads: Number(s.unassigned_leads ?? 0),
         activeEnquiries: Number(s.active_enquiries ?? 0),
         bookedThisMonth: Number(s.booked_this_month ?? 0),
         siteVisitsThisMonth: Number(s.site_visits_this_month ?? 0),
       },
+      pipelineStats,
+      sourceStats: sourceRows,
+      byRM: byRMRows,
       recentActivity,
       partnerActivity,
     })

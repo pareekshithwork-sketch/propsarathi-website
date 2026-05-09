@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
     const enquiries = await sql`
       SELECT
         e.enquiry_id, e.stage, e.created_at, e.partner_link_click, e.partner_link_note,
-        l.name AS lead_name, l.phone AS lead_phone
+        l.name AS name,
+        l.phone AS phone,
+        l.customer_location AS city,
+        e.property_type AS property_interest
       FROM crm_enquiries e
       LEFT JOIN crm_leads_v2 l ON l.lead_id = e.lead_id
       WHERE e.partner_id = ${session.partnerId}
@@ -26,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     const listings = await sql`
       SELECT ls.listing_id, ls.property_type, ls.status, ls.created_at,
-             l.name AS lead_name
+             l.name AS owner_name, l.phone AS phone, l.customer_location AS city
       FROM crm_listings ls
       LEFT JOIN crm_leads_v2 l ON l.lead_id = ls.lead_id
       WHERE ls.partner_id = ${session.partnerId}
@@ -38,9 +41,12 @@ export async function GET(request: NextRequest) {
       success: true,
       enquiries: enquiries.map((e: any) => ({
         ...e,
-        lead_phone: maskPhone(e.lead_phone || ''),
+        phone: maskPhone(e.phone || ''),
       })),
-      listings,
+      listings: listings.map((l: any) => ({
+        ...l,
+        phone: maskPhone(l.phone || ''),
+      })),
     })
   } catch (err) {
     console.error('[Partner Referrals]', err)
