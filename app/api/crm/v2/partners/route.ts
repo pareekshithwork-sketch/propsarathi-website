@@ -99,6 +99,24 @@ async function ensurePartnersTables() {
       )
     `
   } catch {}
+  // Add missing columns to crm_partners (idempotent — handles tables created before this column existed)
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS re_engagement_threshold INT DEFAULT 30` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS kyc_status TEXT DEFAULT 'Not Submitted'` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS pan_number TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS aadhaar_number TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS gst_number TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS bank_account TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS bank_ifsc TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS bank_name TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS agreement_accepted BOOLEAN DEFAULT FALSE` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS agreement_accepted_at TIMESTAMPTZ` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS training_done BOOLEAN DEFAULT FALSE` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS training_done_at TIMESTAMPTZ` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS training_done_by TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS portal_password_hash TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS google_id TEXT DEFAULT ''` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ` } catch {}
+  try { await sql`ALTER TABLE crm_partners ADD COLUMN IF NOT EXISTS referrer_partner_id TEXT DEFAULT ''` } catch {}
   // Add partner columns to related tables (idempotent)
   try { await sql`ALTER TABLE crm_enquiries ADD COLUMN IF NOT EXISTS partner_id TEXT DEFAULT ''` } catch {}
   try { await sql`ALTER TABLE crm_enquiries ADD COLUMN IF NOT EXISTS partner_name TEXT DEFAULT ''` } catch {}
