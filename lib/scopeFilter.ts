@@ -32,12 +32,13 @@ export function buildEnquiriesScopeWhere(scope: Scope, userName: string, teamId?
 }
 
 // SQL fragment for crm_partners with table alias 'p'
+// NB: crm_partners uses 'assigned_rm' (text name), not assigned_rm_id/assigned_rm_name
 export function buildPartnersScopeWhere(scope: Scope, userName: string, teamId?: number | null) {
   if (scope === 'org') return sql``
   if (scope === 'team' && teamId) {
-    return sql`AND p.assigned_rm_id IN (SELECT id FROM crm_users WHERE team_id = ${teamId} AND is_active = TRUE)`
+    return sql`AND p.assigned_rm IN (SELECT name FROM crm_users WHERE team_id = ${teamId} AND is_active = TRUE)`
   }
-  return sql`AND p.assigned_rm_name = ${userName}`
+  return sql`AND p.assigned_rm = ${userName}`
 }
 
 // SQL fragment for crm_data (no alias, uses 'assigned_to' column)
