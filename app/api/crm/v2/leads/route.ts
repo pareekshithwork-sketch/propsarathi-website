@@ -137,14 +137,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      name, phone,
+      name: nameField, full_name,
+      phone,
       alternatePhone = '', email = '', countryCode = '+91',
       source = 'Direct', subSource = '',
       referralName = '', referralPhone = '',
-      customerLocation = '', assignedRm = '',
+      customerLocation = '',
+      assignedRm = '', assigned_rm_id,
       leadType = 'Buyer', tags = '',
+      notes = '',
       forceInsert = false,
     } = body
+    const name = full_name || nameField
 
     if (!name || !phone) {
       return NextResponse.json({ success: false, error: 'Name and phone are required' }, { status: 400 })
@@ -173,9 +177,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ duplicate: true, existingLead: existing[0] })
     }
 
-    // Resolve assigned_rm_id
-    let assignedRmId: number | null = null
-    if (assignedRm) {
+    // Resolve assigned_rm_id — Flutter may send assigned_rm_id directly or assignedRm by name
+    let assignedRmId: number | null = assigned_rm_id ? Number(assigned_rm_id) : null
+    let resolvedRm = assignedRm
+    if (assigned_rm_id && !assignedRm) {
+      const [rmRow] = await sql`SELECT name FROM crm_users WHERE id = ${assigned_rm_id} AND is_active = TRUE LIMIT 1`
+      if (rmRow) resolvedRm = rmRow.name
+    } else if (assignedRm && !assignedRmId) {
       const [rmRow] = await sql`SELECT id FROM crm_users WHERE name = ${assignedRm} AND is_active = TRUE LIMIT 1`
       if (rmRow) assignedRmId = rmRow.id
     }
@@ -189,7 +197,7 @@ export async function POST(request: NextRequest) {
       VALUES
         (${name}, ${phone}, ${alternatePhone}, ${email}, ${countryCode},
          ${source}, ${subSource}, ${referralName}, ${referralPhone},
-         ${customerLocation}, ${assignedRm}, ${assignedRmId},
+         ${customerLocation}, ${resolvedRm}, ${assignedRmId},
          ${leadType}, ${tags}, ${user.name})
       RETURNING *
     `
@@ -198,10 +206,14 @@ export async function POST(request: NextRequest) {
       INSERT INTO crm_activity_log
         (lead_id, activity_type, title, description, performed_by)
       VALUES
-        (${lead.lead_id}, 'lead_created', 'Lead created', ${'Source: ' + source}, ${user.name})
+        (${lead.lead_id}, 'lead_created', 'Lead created', ${notes || 'Source: ' + source}, ${user.name})
     `
 
-    return NextResponse.json({ success: true, leadId: lead.lead_id, lead })
+    return NextResponse.json({
+      success: true,
+      leadId: lead.lead_id,
+      lead: { ...lead, full_name: lead.name },
+    })
   } catch (e: any) {
     return NextResponse.json({ success: false, error: 'An error occurred' }, { status: 500 })
   }
