@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
 import { validateScope, buildLeadsScopeWhere } from '@/lib/scopeFilter'
+import { sendPushNotification } from '@/lib/firebase-admin'
 
 function auth(req: NextRequest) {
   const token = req.cookies.get('crm_token')?.value
@@ -208,6 +209,24 @@ export async function POST(request: NextRequest) {
       VALUES
         (${lead.lead_id}, 'lead_created', 'Lead created', ${notes || 'Source: ' + source}, ${user.name})
     `
+
+    // Fire-and-forget push notification to assigned RM
+    if (resolvedRm || user.name) {
+      const rmName = resolvedRm || user.name
+      sql`SELECT fcm_token FROM crm_device_tokens WHERE user_id = ${rmName}`
+        .then(rows => {
+          const tokens = rows.map((r: any) => r.fcm_token).filter(Boolean)
+          if (tokens.length) {
+            sendPushNotification(
+              tokens,
+              'New Lead Assigned 🎯',
+              `${name} — ${source}`,
+              { type: 'new_lead', lead_id: lead.lead_id }
+            )
+          }
+        })
+        .catch(() => {})
+    }
 
     return NextResponse.json({
       success: true,
