@@ -90,26 +90,27 @@ function getApp() {
 
   const projectId   = process.env.FIREBASE_PROJECT_ID
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-  const privateKey  = process.env.FIREBASE_PRIVATE_KEY
+
+  // Normalize the private key: handle Vercel's \\n escaping, strip surrounding
+  // quotes that some copy-paste flows add, and trim whitespace
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY
+    ?.replace(/\\n/g, '\n')
+    ?.replace(/^"/, '')
+    ?.replace(/"$/, '')
+    ?.trim()
 
   console.log('[FCM] FIREBASE_PROJECT_ID present:',    !!projectId)
   console.log('[FCM] FIREBASE_CLIENT_EMAIL present:',  !!clientEmail)
   console.log('[FCM] FIREBASE_PRIVATE_KEY present:',   !!privateKey)
+  console.log('[FCM] init attempt, key length:', privateKey?.length, 'starts:', privateKey?.substring(0, 30))
 
   if (!projectId || !clientEmail || !privateKey) {
     console.warn('[FCM] Firebase env vars not set — push notifications disabled')
     return null
   }
 
-  // Private key diagnostics — safe to log (no secret content exposed)
-  console.log('[FCM] privateKey length:', privateKey.length)
-  console.log('[FCM] privateKey first 50 chars:', privateKey.substring(0, 50))
   console.log('[FCM] privateKey has real newlines:', privateKey.includes('\n'))
-  console.log('[FCM] privateKey has literal \\n:', privateKey.includes('\\n'))
-
-  const normalizedKey = privateKey.replace(/\\n/g, '\n')
-  console.log('[FCM] normalizedKey length:', normalizedKey.length)
-  console.log('[FCM] normalizedKey starts with BEGIN:', normalizedKey.trimStart().startsWith('-----BEGIN'))
+  console.log('[FCM] privateKey starts with BEGIN:', privateKey.trimStart().startsWith('-----BEGIN'))
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -125,7 +126,7 @@ function getApp() {
       credential: admin.credential.cert({
         projectId,
         clientEmail,
-        privateKey: normalizedKey,
+        privateKey,
       }),
     })
     console.log('[FCM] Firebase Admin initialised successfully')
