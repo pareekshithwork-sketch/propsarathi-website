@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
-import { sendPushNotification } from '@/lib/firebase-admin'
+import { sendPushNotification, getDeviceTokensForUser, getDeviceTokensForRole } from '@/lib/firebase-admin'
 
 function auth(req: NextRequest) {
   return verifyCRMToken(req.cookies.get('crm_token')?.value || '')
@@ -52,31 +52,28 @@ export async function PATCH(
         (${enquiry.enquiry_id}, ${id}, ${enquiry.current_stage}, ${stage}, ${sub_stage}, ${user.name})
     `
 
-    // Fire-and-forget push to assigned RM + all admin/super_admin
+    // Fire-and-forget push to assigned RM + all admins
     const [lead] = await sql`SELECT name, assigned_rm FROM crm_leads_v2 WHERE lead_id = ${id} LIMIT 1`
     if (lead) {
       Promise.all([
-        lead.assigned_rm
-          ? sql`SELECT fcm_token FROM crm_device_tokens WHERE user_id = ${lead.assigned_rm}`
-          : Promise.resolve([]),
-        sql`SELECT dt.fcm_token FROM crm_device_tokens dt
-            JOIN crm_users u ON u.name = dt.user_id
-            WHERE u.role IN ('admin', 'super_admin') AND u.is_active = TRUE`,
+        lead.assigned_rm ? getDeviceTokensForUser(lead.assigned_rm) : Promise.resolve([]),
+        getDeviceTokensForRole('admin'),
+        getDeviceTokensForRole('super_admin'),
       ])
-        .then(([rmRows, adminRows]) => {
-          const tokens = [...rmRows, ...adminRows]
-            .map((r: any) => r.fcm_token)
-            .filter((t: string, i: number, a: string[]) => t && a.indexOf(t) === i) // dedupe
+        .then(([rmTokens, adminTokens, superAdminTokens]) => {
+          const tokens = [...rmTokens, ...adminTokens, ...superAdminTokens]
+            .filter((t, i, a) => t && a.indexOf(t) === i) // dedupe
+          console.log('[FCM] stage change — total tokens:', tokens.length)
           if (tokens.length) {
-            sendPushNotification(
+            return sendPushNotification(
               tokens,
               'Stage Updated 📈',
               `${lead.name} → ${stage}`,
               { type: 'stage_changed', lead_id: id }
-            )
+            ).then(result => console.log('[FCM] stage notification result:', result))
           }
         })
-        .catch(() => {})
+        .catch(e => console.error('[FCM] stage notification error:', e.message))
     }
 
     return NextResponse.json({

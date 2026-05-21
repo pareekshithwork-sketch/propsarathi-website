@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
-import { sendPushNotification } from '@/lib/firebase-admin'
+import { sendPushNotification, getDeviceTokensForUser, getDeviceTokensForRole } from '@/lib/firebase-admin'
 
 // Vercel Cron calls this with a header — accept only from Vercel or internal
 function isAuthorized(request: NextRequest) {
@@ -44,8 +44,7 @@ export async function GET(request: NextRequest) {
     `
 
     for (const task of upcoming) {
-      const rows = await sql`SELECT fcm_token FROM crm_device_tokens WHERE user_id = ${task.assigned_to}`
-      const tokens = rows.map((r: any) => r.fcm_token).filter(Boolean)
+      const tokens = task.assigned_to ? await getDeviceTokensForUser(task.assigned_to) : []
       if (tokens.length) {
         await sendPushNotification(
           tokens,
@@ -71,22 +70,15 @@ export async function GET(request: NextRequest) {
     `
 
     if (overdue.length > 0) {
-      // Get all admin/super_admin tokens once
-      const adminRows = await sql`
-        SELECT dt.fcm_token FROM crm_device_tokens dt
-        JOIN crm_users u ON u.name = dt.user_id
-        WHERE u.role IN ('admin', 'super_admin') AND u.is_active = TRUE
-      `
-      const adminTokens = adminRows.map((r: any) => r.fcm_token).filter(Boolean)
+      const [adminTokens, superAdminTokens] = await Promise.all([
+        getDeviceTokensForRole('admin'),
+        getDeviceTokensForRole('super_admin'),
+      ])
 
       for (const task of overdue) {
-        const rmRows = task.assigned_to
-          ? await sql`SELECT fcm_token FROM crm_device_tokens WHERE user_id = ${task.assigned_to}`
-          : []
-        const rmTokens = rmRows.map((r: any) => r.fcm_token).filter(Boolean)
-
-        const tokens = [...rmTokens, ...adminTokens].filter(
-          (t: string, i: number, a: string[]) => a.indexOf(t) === i
+        const rmTokens = task.assigned_to ? await getDeviceTokensForUser(task.assigned_to) : []
+        const tokens = [...rmTokens, ...adminTokens, ...superAdminTokens].filter(
+          (t, i, a) => t && a.indexOf(t) === i
         )
 
         if (tokens.length) {

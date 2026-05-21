@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
 import { validateScope, buildLeadsScopeWhere } from '@/lib/scopeFilter'
-import { sendPushNotification } from '@/lib/firebase-admin'
+import { sendPushNotification, getDeviceTokensForUser } from '@/lib/firebase-admin'
 
 function auth(req: NextRequest) {
   const token = req.cookies.get('crm_token')?.value
@@ -211,22 +211,23 @@ export async function POST(request: NextRequest) {
     `
 
     // Fire-and-forget push notification to assigned RM
-    if (resolvedRm || user.name) {
-      const rmName = resolvedRm || user.name
-      sql`SELECT fcm_token FROM crm_device_tokens WHERE user_id = ${rmName}`
-        .then(rows => {
-          const tokens = rows.map((r: any) => r.fcm_token).filter(Boolean)
-          if (tokens.length) {
-            sendPushNotification(
-              tokens,
-              'New Lead Assigned 🎯',
-              `${name} — ${source}`,
-              { type: 'new_lead', lead_id: lead.lead_id }
-            )
-          }
-        })
-        .catch(() => {})
-    }
+    const rmName = resolvedRm || user.name
+    console.log('[FCM] Notification trigger: looking up device tokens for RM:', rmName)
+    getDeviceTokensForUser(rmName)
+      .then(tokens => {
+        console.log('[FCM] Device tokens found:', tokens.length)
+        if (tokens.length) {
+          return sendPushNotification(
+            tokens,
+            'New Lead Assigned 🎯',
+            `${name} — ${source}`,
+            { type: 'new_lead', lead_id: lead.lead_id }
+          ).then(result => {
+            console.log('[FCM] Notification result:', result)
+          })
+        }
+      })
+      .catch(e => console.error('[FCM] notification fire-and-forget error:', e.message))
 
     return NextResponse.json({
       success: true,
