@@ -1,4 +1,38 @@
-import admin from 'firebase-admin'
+// firebase-admin is loaded lazily via require() so Next.js never tries to
+// bundle it at build time — it has native Node.js deps that break bundling.
+
+let _app: any = null
+
+function getApp() {
+  if (_app) return _app
+
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
+  if (!raw) {
+    console.warn('[firebase-admin] FIREBASE_SERVICE_ACCOUNT_JSON is not set — push notifications disabled')
+    return null
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const admin = require('firebase-admin')
+    if (admin.apps.length) {
+      _app = admin.apps[0]
+      return _app
+    }
+
+    const serviceAccount = JSON.parse(raw)
+    // Vercel stores \n as literal \\n in env vars — normalise before passing to Firebase
+    if (typeof serviceAccount.private_key === 'string') {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n')
+    }
+
+    _app = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
+    return _app
+  } catch (e: any) {
+    console.error('[firebase-admin] init failed:', e.message)
+    return null
+  }
+}
 
 export type InitStatus =
   | { ok: true }
@@ -12,30 +46,9 @@ export function getInitStatus(): InitStatus {
   } catch (e: any) {
     return { ok: false, reason: 'json_invalid', detail: e.message }
   }
-  if (!admin.apps.length) return { ok: false, reason: 'init_failed', detail: 'admin.apps is empty after init attempt' }
+  const app = getApp()
+  if (!app) return { ok: false, reason: 'init_failed', detail: 'getApp() returned null' }
   return { ok: true }
-}
-
-// Initialise once per process — serverless safe
-if (!admin.apps.length) {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-  if (raw) {
-    try {
-      const serviceAccount = JSON.parse(raw)
-      // Vercel sometimes stores \n as the literal two characters \\n in the private key.
-      // Normalise so the RSA key has real newlines.
-      if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {
-        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n')
-      }
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      })
-    } catch (e: any) {
-      console.error('[firebase-admin] init failed:', e.message)
-    }
-  } else {
-    console.warn('[firebase-admin] FIREBASE_SERVICE_ACCOUNT_JSON is not set — push notifications disabled')
-  }
 }
 
 export async function sendPushNotification(
@@ -45,12 +58,15 @@ export async function sendPushNotification(
   data: Record<string, string> = {}
 ): Promise<{ sent: number; failed: number; error?: string }> {
   if (!tokens.length) return { sent: 0, failed: 0 }
-  if (!admin.apps.length) {
-    console.warn('[firebase-admin] sendPushNotification called but SDK is not initialised')
+
+  const app = getApp()
+  if (!app) {
     return { sent: 0, failed: 0, error: 'SDK not initialised — check FIREBASE_SERVICE_ACCOUNT_JSON' }
   }
 
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const admin = require('firebase-admin')
     const response = await admin.messaging().sendEachForMulticast({
       tokens,
       notification: { title, body },
@@ -59,8 +75,7 @@ export async function sendPushNotification(
       apns: { payload: { aps: { sound: 'default', badge: 1 } } },
     })
 
-    // Log per-token failures so they appear in Vercel function logs
-    response.responses.forEach((r, i) => {
+    response.responses.forEach((r: any, i: number) => {
       if (!r.success) {
         console.error(`[firebase-admin] token[${i}] failed:`, r.error?.code, r.error?.message)
       }
