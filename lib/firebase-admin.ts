@@ -29,12 +29,30 @@ async function ensureDeviceTokensTable() {
   }
 }
 
-/** Fetch all FCM tokens for a given CRM user name. Creates the table on first call. */
+/** Fetch all FCM tokens for a given CRM user name or numeric user_id.
+ *  Matches against crm_device_tokens.user_id regardless of whether it
+ *  stores a name string, a numeric crm_users.id, or any other format. */
 export async function getDeviceTokensForUser(userName: string): Promise<string[]> {
   console.log('[FCM] looking up device tokens for user:', userName)
   await ensureDeviceTokensTable()
   try {
-    const rows = await sql`SELECT fcm_token FROM crm_device_tokens WHERE user_id = ${userName}`
+    // Resolve to canonical crm_users row first (handles name OR numeric id)
+    const [crm_user] = await sql`
+      SELECT id, name FROM crm_users
+      WHERE name = ${userName} OR id::text = ${userName}
+      LIMIT 1
+    `.catch(() => [])
+
+    console.log('[FCM] resolved crm_user:', crm_user ? `id=${crm_user.id} name=${crm_user.name}` : 'not found')
+
+    // Match tokens stored by name, by numeric id, or by the raw input
+    const rows = await sql`
+      SELECT DISTINCT fcm_token
+      FROM crm_device_tokens
+      WHERE user_id = ${userName}
+         OR user_id = ${crm_user?.name ?? ''}
+         OR user_id = ${crm_user?.id?.toString() ?? ''}
+    `
     const tokens = rows.map((r: any) => r.fcm_token).filter(Boolean)
     console.log('[FCM] device tokens found for', userName + ':', tokens.length)
     return tokens
@@ -50,9 +68,10 @@ export async function getDeviceTokensForRole(role: string): Promise<string[]> {
   await ensureDeviceTokensTable()
   try {
     const rows = await sql`
-      SELECT dt.fcm_token
+      SELECT DISTINCT dt.fcm_token
       FROM crm_device_tokens dt
-      JOIN crm_users u ON u.name = dt.user_id
+      JOIN crm_users u
+        ON u.name = dt.user_id OR u.id::text = dt.user_id
       WHERE u.role = ${role} AND u.is_active = TRUE
     `
     const tokens = rows.map((r: any) => r.fcm_token).filter(Boolean)
