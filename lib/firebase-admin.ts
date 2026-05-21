@@ -101,6 +101,16 @@ function getApp() {
     return null
   }
 
+  // Private key diagnostics — safe to log (no secret content exposed)
+  console.log('[FCM] privateKey length:', privateKey.length)
+  console.log('[FCM] privateKey first 50 chars:', privateKey.substring(0, 50))
+  console.log('[FCM] privateKey has real newlines:', privateKey.includes('\n'))
+  console.log('[FCM] privateKey has literal \\n:', privateKey.includes('\\n'))
+
+  const normalizedKey = privateKey.replace(/\\n/g, '\n')
+  console.log('[FCM] normalizedKey length:', normalizedKey.length)
+  console.log('[FCM] normalizedKey starts with BEGIN:', normalizedKey.trimStart().startsWith('-----BEGIN'))
+
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const admin = require('firebase-admin')
@@ -110,18 +120,22 @@ function getApp() {
       return _app
     }
 
+    console.log('[FCM] calling initializeApp for project:', projectId)
     _app = admin.initializeApp({
       credential: admin.credential.cert({
         projectId,
         clientEmail,
-        // Vercel stores \n as literal \\n — normalise so RSA key parses correctly
-        privateKey: privateKey.replace(/\\n/g, '\n'),
+        privateKey: normalizedKey,
       }),
     })
-    console.log('[FCM] Firebase Admin initialised successfully, project:', projectId)
+    console.log('[FCM] Firebase Admin initialised successfully')
     return _app
   } catch (e: any) {
-    console.error('[FCM] init failed:', e.message)
+    console.error('[FCM] *** INIT FAILED ***')
+    console.error('[FCM] error name:', e.name)
+    console.error('[FCM] error message:', e.message)
+    console.error('[FCM] error code:', e.code)
+    console.error('[FCM] error stack:', e.stack)
     return null
   }
 }
