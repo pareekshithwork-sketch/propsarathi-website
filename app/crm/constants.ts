@@ -1,6 +1,6 @@
 import type { Lead } from './types'
 
-export const RM_LIST = ["Pareekshith Rawal", "Kushal Rawal", "Anil Kumar", "Siva Kali"]
+export const RM_LIST = ["Pareekshith Rawal", "Kushal Rawal"]
 
 export const SOURCE_OPTIONS = [
   "Direct", "WhatsApp", "Facebook", "Google Ads", "LinkedIn",

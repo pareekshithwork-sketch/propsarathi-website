@@ -3,11 +3,20 @@
 import React from 'react'
 import { X, Loader2 } from 'lucide-react'
 import type { Lead } from '../types'
-import { RM_LIST, SOURCE_OPTIONS } from '../constants'
+import { SOURCE_OPTIONS } from '../constants'
 import { FormField, Input, Select, Textarea } from './shared'
 import { PhoneInput } from '@/components/PhoneInput'
 
 export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setAddLeadTab, savingLead, onSave, onClose }: any) {
+  const [rmList, setRmList] = React.useState<string[]>([])
+
+  React.useEffect(() => {
+    fetch('/api/crm/v2/users', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.users) setRmList(d.users.map((u: any) => u.name)) })
+      .catch(() => {})
+  }, [])
+
   function upd(field: string, value: string) {
     setLeadForm((p: any) => ({ ...p, [field]: value }))
   }
@@ -40,7 +49,7 @@ export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setA
               key={tab.id}
               onClick={() => setAddLeadTab(tab.id)}
               className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${
-                addLeadTab === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                addLeadTab === tab.id ? "border-[#422D83] text-[#422D83]" : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
               {tab.label}
@@ -119,13 +128,13 @@ export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setA
                 <FormField label="Assigned RM">
                   <Select value={leadForm.assignedRM || ""} onChange={e => upd("assignedRM", e.target.value)}>
                     <option value="">Not Assigned</option>
-                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                    {rmList.map(rm => <option key={rm} value={rm}>{rm}</option>)}
                   </Select>
                 </FormField>
                 <FormField label="Secondary Owner">
                   <Select value={leadForm.secondaryOwner || ""} onChange={e => upd("secondaryOwner", e.target.value)}>
                     <option value="">None</option>
-                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                    {rmList.map(rm => <option key={rm} value={rm}>{rm}</option>)}
                   </Select>
                 </FormField>
               </div>
@@ -244,13 +253,13 @@ export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setA
                 <FormField label="Sourcing Manager">
                   <Select value={leadForm.sourcingManager || ""} onChange={e => upd("sourcingManager", e.target.value)}>
                     <option value="">None</option>
-                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                    {rmList.map(rm => <option key={rm} value={rm}>{rm}</option>)}
                   </Select>
                 </FormField>
                 <FormField label="Closing Manager">
                   <Select value={leadForm.closingManager || ""} onChange={e => upd("closingManager", e.target.value)}>
                     <option value="">None</option>
-                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                    {rmList.map(rm => <option key={rm} value={rm}>{rm}</option>)}
                   </Select>
                 </FormField>
               </div>
@@ -322,7 +331,7 @@ export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setA
             {tabs.map((tab, i) => (
               <div
                 key={tab.id}
-                className={`w-2 h-2 rounded-full transition-colors ${addLeadTab === tab.id ? "bg-blue-600" : "bg-gray-300"}`}
+                className={`w-2 h-2 rounded-full transition-colors ${addLeadTab === tab.id ? "bg-[#422D83]" : "bg-gray-300"}`}
               />
             ))}
           </div>
@@ -333,7 +342,7 @@ export function LeadModal({ editingLead, leadForm, setLeadForm, addLeadTab, setA
             <button
               onClick={onSave}
               disabled={savingLead || !leadForm.clientName || !leadForm.phone}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 text-sm bg-[#422D83] text-white rounded-lg hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-2"
             >
               {savingLead ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {editingLead ? "Save Changes" : "Add Lead"}

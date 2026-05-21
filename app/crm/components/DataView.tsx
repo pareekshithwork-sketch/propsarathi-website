@@ -1,16 +1,23 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Database, Phone, Loader2 } from 'lucide-react'
 import type { DataRecord } from '../types'
-import { RM_LIST } from '../constants'
 import { ScopeToggle, type Scope } from '@/app/crm/components/ScopeToggle'
 
 export function DataView({ dataRecords, selectedData, setSelectedData, dataFilter, setDataFilter, showConvert, setShowConvert, convertForm, setConvertForm, onConvert, savingData, user }: any) {
   const filters = ["All", "Converted", "Not Converted"]
+  const [rmList, setRmList] = useState<string[]>([])
   const [scope, setScope] = useState<Scope>(() => {
     try { return (localStorage.getItem('crm_scope_preference') as Scope) || 'my' } catch { return 'my' }
   })
+
+  useEffect(() => {
+    fetch('/api/crm/v2/users', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.users) setRmList(d.users.map((u: any) => u.name)) })
+      .catch(() => {})
+  }, [])
 
   const displayRecords = scope === 'my' && user?.name
     ? (dataRecords || []).filter((r: any) => r.assigned_to === user.name || r.assignedTo === user.name)
@@ -27,7 +34,7 @@ export function DataView({ dataRecords, selectedData, setSelectedData, dataFilte
                 key={f}
                 onClick={() => setDataFilter(f)}
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                  dataFilter === f ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  dataFilter === f ? "bg-[#422D83] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
                 {f}
@@ -100,7 +107,7 @@ export function DataView({ dataRecords, selectedData, setSelectedData, dataFilte
             {selectedData.converted !== "Yes" && (
               <button
                 onClick={() => setShowConvert(true)}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium"
+                className="px-3 py-1.5 bg-[#422D83] hover:bg-[#321f6b] text-white rounded-lg text-xs font-medium"
               >
                 Convert to Lead
               </button>
@@ -143,7 +150,7 @@ export function DataView({ dataRecords, selectedData, setSelectedData, dataFilte
                     className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white focus:outline-none"
                   >
                     <option value="">Select RM</option>
-                    {RM_LIST.map(rm => <option key={rm} value={rm}>{rm}</option>)}
+                    {rmList.map(rm => <option key={rm} value={rm}>{rm}</option>)}
                   </select>
                 </div>
                 <div>
@@ -182,7 +189,7 @@ export function DataView({ dataRecords, selectedData, setSelectedData, dataFilte
                 <button
                   onClick={onConvert}
                   disabled={savingData}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-4 py-2 bg-[#422D83] text-white rounded-lg text-xs font-medium hover:bg-[#321f6b] disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {savingData ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                   Convert
