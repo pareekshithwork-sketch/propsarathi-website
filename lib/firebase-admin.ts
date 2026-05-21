@@ -69,11 +69,16 @@ export async function getDeviceTokensForRole(role: string): Promise<string[]> {
 function getApp() {
   if (_app) return _app
 
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-  console.log('[FCM] FIREBASE_SERVICE_ACCOUNT_JSON present:', !!raw)
+  const projectId   = process.env.FIREBASE_PROJECT_ID
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
+  const privateKey  = process.env.FIREBASE_PRIVATE_KEY
 
-  if (!raw) {
-    console.warn('[FCM] env var not set — push notifications disabled')
+  console.log('[FCM] FIREBASE_PROJECT_ID present:',    !!projectId)
+  console.log('[FCM] FIREBASE_CLIENT_EMAIL present:',  !!clientEmail)
+  console.log('[FCM] FIREBASE_PRIVATE_KEY present:',   !!privateKey)
+
+  if (!projectId || !clientEmail || !privateKey) {
+    console.warn('[FCM] Firebase env vars not set — push notifications disabled')
     return null
   }
 
@@ -86,14 +91,15 @@ function getApp() {
       return _app
     }
 
-    const serviceAccount = JSON.parse(raw)
-    // Vercel stores \n as literal \\n — normalise before passing to Firebase
-    if (typeof serviceAccount.private_key === 'string') {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n')
-    }
-
-    _app = admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
-    console.log('[FCM] Firebase Admin initialised successfully, project:', serviceAccount.project_id)
+    _app = admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        // Vercel stores \n as literal \\n — normalise so RSA key parses correctly
+        privateKey: privateKey.replace(/\\n/g, '\n'),
+      }),
+    })
+    console.log('[FCM] Firebase Admin initialised successfully, project:', projectId)
     return _app
   } catch (e: any) {
     console.error('[FCM] init failed:', e.message)
@@ -108,13 +114,9 @@ export type InitStatus =
   | { ok: false; reason: 'env_missing' | 'json_invalid' | 'init_failed'; detail?: string }
 
 export function getInitStatus(): InitStatus {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
-  if (!raw) return { ok: false, reason: 'env_missing' }
-  try {
-    JSON.parse(raw)
-  } catch (e: any) {
-    return { ok: false, reason: 'json_invalid', detail: e.message }
-  }
+  const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
+    .filter(k => !process.env[k])
+  if (missing.length) return { ok: false, reason: 'env_missing', detail: `missing: ${missing.join(', ')}` }
   const app = getApp()
   if (!app) return { ok: false, reason: 'init_failed', detail: 'getApp() returned null' }
   return { ok: true }
