@@ -114,6 +114,10 @@ export type InitStatus =
   | { ok: false; reason: 'env_missing' | 'json_invalid' | 'init_failed'; detail?: string }
 
 export function getInitStatus(): InitStatus {
+  console.log('FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID ? 'SET' : 'MISSING')
+  console.log('FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL ? 'SET' : 'MISSING')
+  console.log('FIREBASE_PRIVATE_KEY:', process.env.FIREBASE_PRIVATE_KEY ? 'SET (length: ' + process.env.FIREBASE_PRIVATE_KEY.length + ')' : 'MISSING')
+
   const missing = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY']
     .filter(k => !process.env[k])
   if (missing.length) return { ok: false, reason: 'env_missing', detail: `missing: ${missing.join(', ')}` }
