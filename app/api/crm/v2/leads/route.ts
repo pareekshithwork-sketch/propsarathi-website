@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import sql from '@/lib/db'
 import { verifyCRMToken } from '@/lib/crmAuth'
 import { validateScope, buildLeadsScopeWhere } from '@/lib/scopeFilter'
-import { sendPushNotification, getDeviceTokensForUser } from '@/lib/firebase-admin'
+import { sendPushNotification, getDeviceTokensForUser, getInitStatus } from '@/lib/firebase-admin'
 
 function auth(req: NextRequest) {
   const token = req.cookies.get('crm_token')?.value
@@ -14,6 +14,29 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
+
+  // Notification smoke-test — GET /api/crm/v2/leads?test_notification=true
+  if (searchParams.get('test_notification') === 'true') {
+    const initStatus = getInitStatus()
+    const rows = await sql`SELECT user_id, fcm_token, platform FROM crm_device_tokens`.catch(() => [])
+    const tokens = (rows as any[]).map(r => r.fcm_token).filter(Boolean)
+    let sendResult: object = { skipped: 'no tokens registered' }
+    if (tokens.length) {
+      sendResult = await sendPushNotification(
+        tokens,
+        'PropSarathi CRM 🎉',
+        'Push notifications are working!',
+        { type: 'test' }
+      )
+    }
+    return NextResponse.json({
+      initStatus,
+      tokenCount: tokens.length,
+      tokens: (rows as any[]).map(r => ({ user_id: r.user_id, platform: r.platform, token_prefix: r.fcm_token?.slice(0, 20) + '…' })),
+      sendResult,
+    })
+  }
+
   const search = searchParams.get('search') || ''
   const type = searchParams.get('type') || 'All'
   const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 200)
